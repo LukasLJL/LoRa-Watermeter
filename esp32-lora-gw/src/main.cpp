@@ -12,7 +12,8 @@ void setup()
 {
   // initialize Serial Monitor
   Serial.begin(115200);
-  while (!Serial)    ;
+  while (!Serial)
+    ;
   Serial.println("LoRa Gateway");
 
   // setup LoRa transceiver module
@@ -37,16 +38,22 @@ void setup()
 
 void loop()
 {
-  Serial.print("Sending packet: ");
-  Serial.println(counter);
+  // try to parse packet
+  int packetSize = LoRa.parsePacket();
+  if (packetSize)
+  {
+    // received a packet
+    Serial.print("Received packet '");
 
-  // Send LoRa packet to receiver
-  LoRa.beginPacket();
-  LoRa.print("hello ");
-  LoRa.print(counter);
-  LoRa.endPacket();
+    // read packet
+    while (LoRa.available())
+    {
+      String LoRaData = LoRa.readString();
+      Serial.print(LoRaData);
+    }
 
-  counter++;
-
-  delay(10000);
+    // print RSSI of packet
+    Serial.print("' with RSSI ");
+    Serial.println(LoRa.packetRssi());
+  }
 }
