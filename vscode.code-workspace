@@ -1,0 +1,13 @@
+{
+	"folders": [
+		{
+			"name": "esp32-lora-sender",
+			"path": "esp32-lora-sender"
+		},
+		{
+			"name": "esp32-lora-gw",
+			"path": "esp32-lora-gw"
+		}
+	],
+	"settings": {}
+}
