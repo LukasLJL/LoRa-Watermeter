@@ -24,6 +24,7 @@
 void setupLoRa();
 void setupWiFi();
 void setupMQTT();
+void reconnect();
 
 // MQTT Client
 WiFiClient espClient;
@@ -84,7 +85,6 @@ void setupMQTT()
     else
     {
       Serial.println("MQTT connection failed.");
-      abort();
     }
   }
   client.publish(mqttStatus, "connected", true);
@@ -92,6 +92,11 @@ void setupMQTT()
 
 void loop()
 {
+  if (!client.connected())
+  {
+    reconnect();
+  }
+
   // try to parse packet
   int packetSize = LoRa.parsePacket();
   if (packetSize)
@@ -108,5 +113,17 @@ void loop()
       client.publish(mqttSensor, String(LoRaData).c_str(), true);
       client.publish(mqttSensor, String(LoRa.packetRssi()).c_str(), true);
     }
+  }
+}
+
+void reconnect()
+{
+  if (WiFi.status() != WL_CONNECTED)
+  {
+    setupWiFi();
+  }
+
+  if (WiFi.status() == WL_CONNECTED){
+    setupMQTT();
   }
 }
