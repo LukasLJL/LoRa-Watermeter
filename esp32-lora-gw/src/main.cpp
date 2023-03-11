@@ -1,39 +1,93 @@
 #include <SPI.h>
 #include <LoRa.h>
+#include <WiFi.h>
+#include <PubSubClient.h>
+#include "secrets.h"
 
-// define the pins used by the lora module
-#define ss 18
-#define rst 14
-#define dio0 26
+// LoRa Pins
+#define SS 18
+#define RST 14
+#define DIO0 26
 
-int counter = 0;
+// SPI Pins
+#define SCK 5
+#define MISO 19
+#define MOSI 27
+
+// MQTT Topics/Channels
+#define mqttChannel "esp32-lora-gw"
+#define mqttStatus mqttChannel "/status"
+#define mqttSensor mqttChannel "/sensor"
+#define mqttWaterMeter mqttChannel "/watermeter"
+
+// Functions
+void setupLoRa();
+void setupWiFi();
+void setupMQTT();
+
+// MQTT Client
+WiFiClient espClient;
+PubSubClient client(espClient);
 
 void setup()
 {
-  // initialize Serial Monitor
   Serial.begin(115200);
-  while (!Serial)
-    ;
   Serial.println("LoRa Gateway");
 
-  // setup LoRa transceiver module
-  SPI.begin(5, 19, 27, 18);
-  LoRa.setPins(ss, rst, dio0);
+  // Setup Pin Configuration
+  SPI.begin(SCK, MISO, MOSI, SS);
+  LoRa.setPins(SS, RST, DIO0);
 
-  // replace the LoRa.begin(---E-) argument with your location's frequency
-  // 433E6 for Asia
-  // 866E6 for Europe
-  // 915E6 for North America
+  setupLoRa();
+  setupWiFi();
+  setupMQTT();
+}
+
+void setupLoRa()
+{
   while (!LoRa.begin(866E6))
   {
-    Serial.println(".");
+    Serial.println("Trying to start LoRa Interface");
     delay(500);
   }
-  // Change sync word (0xF3) to match the receiver
-  // The sync word assures you don't get LoRa messages from other LoRa transceivers
-  // ranges from 0-0xFF
+
+  // Change sync word to match the receiver, ranges from 0-0xFF
   LoRa.setSyncWord(0xF3);
   Serial.println("LoRa Initializing OK!");
+}
+
+void setupWiFi()
+{
+  Serial.println("Connecting to WiFi...");
+  WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
+  WiFi.setHostname("esp32-lora-gw");
+  while (WiFi.status() != WL_CONNECTED)
+  {
+    delay(1000);
+    Serial.println("Trying to connect to your WiFi...");
+  }
+  Serial.print("ESP32 IP-Address: ");
+  Serial.print(WiFi.localIP());
+  Serial.println("");
+}
+
+void setupMQTT()
+{
+  client.setServer(MQTT_HOST, MQTT_PORT);
+  while (!client.connected())
+  {
+    Serial.println("Attempting MQTT connection...");
+    if (client.connect(MQTT_CLIENT, MQTT_USER, MQTT_PASSWORD))
+    {
+      Serial.println("MQTT connected with name: " MQTT_CLIENT);
+    }
+    else
+    {
+      Serial.println("MQTT connection failed.");
+      abort();
+    }
+  }
+  client.publish(mqttStatus, "connected", true);
 }
 
 void loop()
@@ -50,10 +104,9 @@ void loop()
     {
       String LoRaData = LoRa.readString();
       Serial.print(LoRaData);
-    }
 
-    // print RSSI of packet
-    Serial.print("' with RSSI ");
-    Serial.println(LoRa.packetRssi());
+      client.publish(mqttSensor, String(LoRaData).c_str(), true);
+      client.publish(mqttSensor, String(LoRa.packetRssi()).c_str(), true);
+    }
   }
 }
