@@ -2,6 +2,7 @@
 #include <LoRa.h>
 #include <WiFi.h>
 #include <PubSubClient.h>
+#include <ArduinoJson.h>
 #include "secrets.h"
 
 // LoRa Pins
@@ -25,10 +26,23 @@ void setupLoRa();
 void setupWiFi();
 void setupMQTT();
 void reconnect();
+void sendHomeAssistantDiscovery();
+void MQTTHomeAssistantDiscovery();
 
 // MQTT Client
 WiFiClient espClient;
 PubSubClient client(espClient);
+
+struct homeAssistantTopic
+{
+  String field;
+  String name;
+  String icon;
+  String unit;
+  String deviceClass;
+  String stateClass;
+  String entityCategory;
+};
 
 void setup()
 {
@@ -42,6 +56,8 @@ void setup()
   setupLoRa();
   setupWiFi();
   setupMQTT();
+
+  MQTTHomeAssistantDiscovery();
 }
 
 void setupLoRa()
@@ -75,6 +91,7 @@ void setupWiFi()
 void setupMQTT()
 {
   client.setServer(MQTT_HOST, MQTT_PORT);
+  client.setBufferSize(1024);
   while (!client.connected())
   {
     Serial.println("Attempting MQTT connection...");
@@ -88,6 +105,66 @@ void setupMQTT()
     }
   }
   client.publish(mqttStatus, "connected", true);
+}
+
+void sendHomeAssistantDiscovery(homeAssistantTopic haTopic)
+{
+  const int capacityPayload = JSON_OBJECT_SIZE(26);
+  StaticJsonDocument<capacityPayload> payload;
+
+  String mainTopic = "esp-32-lora-gw";
+  String configTopic = "homeassistant/sensor/" + mainTopic + "/" + haTopic.field + "/config";
+
+  JsonObject device = payload.createNestedObject("device");
+  device["identifiers"] = mainTopic;
+  device["model"] = "LoRa-Watermeter";
+  device["manufacturer"] = "IoT";
+  device["name"] = "LoRa-Watermeter";
+  device["sw_version"] = "0.0.1";
+
+  payload["~"] = mainTopic;
+  payload["unique_id"] = "esp32-lora-gw-" + haTopic.field;
+  payload["object_id"] = "esp32-lora-gw-" + haTopic.field;
+  payload["name"] = haTopic.name;
+  payload["icon"] = "mdi:" + haTopic.icon;
+  payload["unit_of_measurement"] = haTopic.unit;
+  payload["state_topic"] = mainTopic + "/state";
+  payload["value_template"] = "{{ value_json." + haTopic.field + " }}";
+
+  // For later use, need to set all atributes for every sensor/topic
+  // payload["device_class"] = haTopic.deviceClass;
+  // payload["state_class"] = haTopic.stateClass;
+  // payload["entity_category"] = haTopic.entityCategory;
+
+  String payloadSerialized;
+  serializeJson(payload, payloadSerialized);
+
+  client.publish(String(configTopic).c_str(), String(payloadSerialized).c_str(), true);
+}
+
+void MQTTHomeAssistantDiscovery()
+{
+  // diagnostic information
+  struct homeAssistantTopic uptime = {"uptime", "Uptime", "clock-time-eight-outline", "s", "", "", "diagnostic"};
+  struct homeAssistantTopic MAC = {"mac", "MAC-Address", "network-outline", "", "", "", "diagnostic"};
+  struct homeAssistantTopic hostname = {"hostname", "Hostname", "network-outline", "", "", "", "diagnostic"};
+  struct homeAssistantTopic wifiRSSI = {"wifi-rssi", "WiFi-RSSI", "wifi", "dBm", "signal_strength", "", "diagnostic"};
+  struct homeAssistantTopic loraRSSI = {"lora-rssi", "LoRa-RSSI", "wifi", "dBm", "signal_strength", "", "diagnostic"};
+  struct homeAssistantTopic ip = {"ip", "IP", "network-outline", "", "", "", "diagnostic"};
+
+  sendHomeAssistantDiscovery(uptime);
+  sendHomeAssistantDiscovery(MAC);
+  sendHomeAssistantDiscovery(hostname);
+  sendHomeAssistantDiscovery(wifiRSSI);
+  sendHomeAssistantDiscovery(loraRSSI);
+  sendHomeAssistantDiscovery(ip);
+
+  // sensor information
+  struct homeAssistantTopic currentMeterValue = {"current-meter", "Water Consumption", "gauge", "m^3", "", "", ""};
+  struct homeAssistantTopic preMeterValue = {"pre-meter", "Previous Water Consumption", "gauge", "m^3", "", "", ""};
+
+  sendHomeAssistantDiscovery(currentMeterValue);
+  sendHomeAssistantDiscovery(preMeterValue);
 }
 
 void loop()
