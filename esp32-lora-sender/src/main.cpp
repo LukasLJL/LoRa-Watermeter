@@ -1,11 +1,18 @@
 #include <Arduino.h>
 #include <SPI.h>
 #include <LoRa.h>
+#include <ArduinoJson.h>
+#include "DHT.h"
 
 // define the pins used by the lora module
 #define ss 18
 #define rst 14
 #define dio0 26
+#define DHTPIN 13
+
+#define DHTTYPE DHT11
+
+DHT dht(DHTPIN, DHTTYPE);
 
 int counter = 0;
 
@@ -14,6 +21,7 @@ void setup()
   // initialize Serial Monitor
   Serial.begin(115200);
   while (!Serial)    ;
+  dht.begin(); 
   Serial.println("LoRa Sender");
 
   // setup LoRa transceiver module
@@ -38,13 +46,23 @@ void setup()
 
 void loop()
 {
+  StaticJsonDocument<96> payload;
+
+  payload["humidity"] = dht.readHumidity();
+  payload["temperature"] = dht.readTemperature();
+  payload["packet_number"] = counter;
+  payload["message"] = "Hello";
+
+  String payloadSerialized;
+  serializeJson(payload, payloadSerialized);
+
+
   Serial.print("Sending packet: ");
-  Serial.println(counter);
+  Serial.println(payloadSerialized);
 
   // Send LoRa packet to receiver
   LoRa.beginPacket();
-  LoRa.print("hello ");
-  LoRa.print(counter);
+  LoRa.print(payloadSerialized);
   LoRa.endPacket();
 
   counter++;
