@@ -20,6 +20,7 @@
 #define mqttStatus mqttChannel "/status"
 #define mqttSensor mqttChannel "/sensor"
 #define mqttWaterMeter mqttChannel "/watermeter"
+#define mqttState mqttChannel "/state"
 
 // Functions
 void setupLoRa();
@@ -28,10 +29,15 @@ void setupMQTT();
 void reconnect();
 void sendHomeAssistantDiscovery();
 void MQTTHomeAssistantDiscovery();
+void sendDeviceInformationMQTT();
 
 // MQTT Client
 WiFiClient espClient;
 PubSubClient client(espClient);
+
+// Variables
+unsigned long previousMillis = 0;
+long one_minute_interval = 1 * 60 * 1000UL;
 
 struct homeAssistantTopic
 {
@@ -58,6 +64,7 @@ void setup()
   setupMQTT();
 
   MQTTHomeAssistantDiscovery();
+  sendDeviceInformationMQTT();
 }
 
 void setupLoRa()
@@ -112,7 +119,7 @@ void sendHomeAssistantDiscovery(homeAssistantTopic haTopic)
   const int capacityPayload = JSON_OBJECT_SIZE(26);
   StaticJsonDocument<capacityPayload> payload;
 
-  String mainTopic = "esp-32-lora-gw";
+  String mainTopic = mqttChannel;
   String configTopic = "homeassistant/sensor/" + mainTopic + "/" + haTopic.field + "/config";
 
   JsonObject device = payload.createNestedObject("device");
@@ -131,9 +138,17 @@ void sendHomeAssistantDiscovery(homeAssistantTopic haTopic)
   payload["state_topic"] = mainTopic + "/state";
   payload["value_template"] = "{{ value_json." + haTopic.field + " }}";
 
+  if (haTopic.deviceClass != "")
+  {
+    payload["device_class"] = haTopic.deviceClass;
+  }
+
+  if (haTopic.stateClass != "")
+  {
+    payload["state_class"] = haTopic.stateClass;
+  }
+
   // For later use, need to set all atributes for every sensor/topic
-  // payload["device_class"] = haTopic.deviceClass;
-  // payload["state_class"] = haTopic.stateClass;
   // payload["entity_category"] = haTopic.entityCategory;
 
   String payloadSerialized;
@@ -148,8 +163,8 @@ void MQTTHomeAssistantDiscovery()
   struct homeAssistantTopic uptime = {"uptime", "Uptime", "clock-time-eight-outline", "s", "", "", "diagnostic"};
   struct homeAssistantTopic MAC = {"mac", "MAC-Address", "network-outline", "", "", "", "diagnostic"};
   struct homeAssistantTopic hostname = {"hostname", "Hostname", "network-outline", "", "", "", "diagnostic"};
-  struct homeAssistantTopic wifiRSSI = {"wifi-rssi", "WiFi-RSSI", "wifi", "dBm", "signal_strength", "", "diagnostic"};
-  struct homeAssistantTopic loraRSSI = {"lora-rssi", "LoRa-RSSI", "wifi", "dBm", "signal_strength", "", "diagnostic"};
+  struct homeAssistantTopic wifiRSSI = {"wifiRSSI", "WiFi-RSSI", "wifi", "dBm", "signal_strength", "", "diagnostic"};
+  struct homeAssistantTopic loraRSSI = {"loraRSSI", "LoRa-RSSI", "wifi", "dBm", "signal_strength", "", "diagnostic"};
   struct homeAssistantTopic ip = {"ip", "IP", "network-outline", "", "", "", "diagnostic"};
 
   sendHomeAssistantDiscovery(uptime);
@@ -162,16 +177,33 @@ void MQTTHomeAssistantDiscovery()
   // sensor information
   struct homeAssistantTopic currentMeterValue = {"current-meter", "Water Consumption", "gauge", "m^3", "", "", ""};
   struct homeAssistantTopic preMeterValue = {"pre-meter", "Previous Water Consumption", "gauge", "m^3", "", "", ""};
+  struct homeAssistantTopic temperature = {"temperature", "Temperature Forest", "thermometer", "°C", "", "", ""};
+  struct homeAssistantTopic humidity = {"humidity", "Humidity Forest", "water-percent", "%", "", "", ""};
+  struct homeAssistantTopic message = {"message", "LoRa Message", "message", "", "", "", ""};
+  struct homeAssistantTopic packet_number = {"packet_number", "LoRa Packet Number", "counter", "", "", "", ""};
 
   sendHomeAssistantDiscovery(currentMeterValue);
   sendHomeAssistantDiscovery(preMeterValue);
+  sendHomeAssistantDiscovery(temperature);
+  sendHomeAssistantDiscovery(humidity);
+  sendHomeAssistantDiscovery(message);
+  sendHomeAssistantDiscovery(packet_number);
 }
 
 void loop()
 {
+
   if (!client.connected())
   {
     reconnect();
+  }
+
+  // Send Device Information only every minute
+  unsigned long currentMillis = millis();
+  if (currentMillis - previousMillis > one_minute_interval)
+  {
+    previousMillis = currentMillis;
+    sendDeviceInformationMQTT();
   }
 
   // try to parse packet
@@ -185,10 +217,20 @@ void loop()
     while (LoRa.available())
     {
       String LoRaData = LoRa.readString();
-      Serial.print(LoRaData);
+      Serial.println(LoRaData);
 
-      client.publish(mqttSensor, String(LoRaData).c_str(), true);
-      client.publish(mqttSensor, String(LoRa.packetRssi()).c_str(), true);
+      // Send LoRa Data
+      client.publish(mqttState, String(LoRaData).c_str(), true);
+
+      // Send LoRa RSSI
+      const int capacityPayload = JSON_OBJECT_SIZE(1);
+      StaticJsonDocument<capacityPayload> payload;
+      payload["loraRSSI"] = LoRa.packetRssi();
+
+      String payloadSerialized;
+      serializeJson(payload, payloadSerialized);
+
+      client.publish(mqttState, String(payloadSerialized).c_str(), true);
     }
   }
 }
@@ -204,4 +246,21 @@ void reconnect()
   {
     setupMQTT();
   }
+}
+
+void sendDeviceInformationMQTT()
+{
+  const int capacityPayload = JSON_OBJECT_SIZE(14);
+  StaticJsonDocument<capacityPayload> payload;
+
+  payload["uptime"] = millis();
+  payload["mac"] = WiFi.macAddress();
+  payload["hostname"] = WiFi.getHostname();
+  payload["wifiRSSI"] = WiFi.RSSI();
+  payload["ip"] = WiFi.localIP();
+
+  String payloadSerialized;
+  serializeJson(payload, payloadSerialized);
+
+  client.publish(mqttState, String(payloadSerialized).c_str(), true);
 }
