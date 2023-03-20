@@ -3,6 +3,7 @@
 #include <LoRa.h>
 #include <ArduinoJson.h>
 #include <WiFi.h>
+#include <ESP32Ping.h>
 #include "DHT.h"
 #include "secrets.h"
 
@@ -23,11 +24,22 @@
 // Functions
 void setupLoRa();
 void setupWiFi();
+String getWatermeterIP();
 
 // DHT
 DHT dht(DHTPIN, DHTTYPE);
 
+// Variables
 int counter = 0;
+String watermeterIP = "127.0.0.1";
+
+typedef struct
+{
+  int current;
+  int previous;
+} watermeterMetric;
+
+watermeterMetric getWatermeterMetrics(String);
 
 void setup()
 {
@@ -68,11 +80,22 @@ void setupWiFi()
 
 void loop()
 {
+  // Caching Watermeter IP-Address
+  if (watermeterIP == "127.0.0.1")
+  {
+    watermeterIP = getWatermeterIP();
+  }
+
+  watermeterMetric watermeterResult = getWatermeterMetrics(watermeterIP);
+
+  // Manage LoRa-Payload
   StaticJsonDocument<96> payload;
 
   payload["humidity"] = dht.readHumidity();
   payload["temperature"] = dht.readTemperature();
   payload["packet_number"] = counter;
+  payload["current-meter"] = watermeterResult.current;
+  payload["pre-meter"] = watermeterResult.previous;
   payload["message"] = "Hello";
 
   String payloadSerialized;
@@ -89,4 +112,25 @@ void loop()
   counter++;
 
   delay(10000);
+}
+
+watermeterMetric getWatermeterMetrics(String ip)
+{
+  return watermeterMetric{1337, 1336};
+}
+
+String getWatermeterIP()
+{
+  for (int i = 2; i <= 254; i++)
+  {
+    IPAddress ip(192, 168, 4, i);
+    bool res = Ping.ping(ip);
+    if (res)
+    {
+      IPAddress ip(192, 168, 4, i);
+      Serial.println("Found WiFi-Device with IP: " + ip.toString());
+      return ip.toString();
+    }
+  }
+  return "127.0.0.1";
 }
