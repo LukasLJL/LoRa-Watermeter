@@ -4,6 +4,7 @@
 #include <ArduinoJson.h>
 #include <WiFi.h>
 #include <ESP32Ping.h>
+#include <HTTPClient.h>
 #include "DHT.h"
 #include "secrets.h"
 
@@ -116,6 +117,24 @@ void loop()
 
 watermeterMetric getWatermeterMetrics(String ip)
 {
+  HTTPClient http;
+  String url = ip + "/json";
+  http.begin(url.c_str());
+
+  int resCode = http.GET();
+
+  if (resCode == 200)
+  {
+    String payload = http.getString();
+    Serial.println(payload);
+  }
+  else
+  {
+    Serial.print("Error code: ");
+    Serial.println(resCode);
+  }
+
+  http.end();
   return watermeterMetric{1337, 1336};
 }
 
@@ -127,7 +146,6 @@ String getWatermeterIP()
     bool res = Ping.ping(ip);
     if (res)
     {
-      IPAddress ip(192, 168, 4, i);
       Serial.println("Found WiFi-Device with IP: " + ip.toString());
       return ip.toString();
     }
