@@ -4,42 +4,47 @@
 #include <ArduinoJson.h>
 #include "DHT.h"
 
-// define the pins used by the lora module
-#define ss 18
-#define rst 14
-#define dio0 26
-#define DHTPIN 13
+// LoRa Pins
+#define SS 18
+#define RST 14
+#define DIO0 26
 
+// SPI Pins
+#define SCK 5
+#define MISO 19
+#define MOSI 27
+
+// Sensor Config
+#define DHTPIN 13
 #define DHTTYPE DHT11
 
+// Functions
+void setupLoRa();
+
+// DHT
 DHT dht(DHTPIN, DHTTYPE);
 
 int counter = 0;
 
 void setup()
 {
-  // initialize Serial Monitor
   Serial.begin(115200);
-  while (!Serial)    ;
-  dht.begin(); 
   Serial.println("LoRa Sender");
 
-  // setup LoRa transceiver module
-  SPI.begin(5, 19, 27, 18);
-  LoRa.setPins(ss, rst, dio0);
+  dht.begin();
+  
+  setupLoRa();
+}
 
-  // replace the LoRa.begin(---E-) argument with your location's frequency
-  // 433E6 for Asia
-  // 866E6 for Europe
-  // 915E6 for North America
+void setupLoRa()
+{
   while (!LoRa.begin(866E6))
   {
-    Serial.println(".");
+    Serial.println("Trying to start LoRa Interface");
     delay(500);
   }
-  // Change sync word (0xF3) to match the receiver
-  // The sync word assures you don't get LoRa messages from other LoRa transceivers
-  // ranges from 0-0xFF
+
+  // Change sync word to match the receiver, ranges from 0-0xFF
   LoRa.setSyncWord(0xF3);
   Serial.println("LoRa Initializing OK!");
 }
@@ -55,7 +60,6 @@ void loop()
 
   String payloadSerialized;
   serializeJson(payload, payloadSerialized);
-
 
   Serial.print("Sending packet: ");
   Serial.println(payloadSerialized);
