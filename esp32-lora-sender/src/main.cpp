@@ -2,7 +2,9 @@
 #include <SPI.h>
 #include <LoRa.h>
 #include <ArduinoJson.h>
+#include <WiFi.h>
 #include "DHT.h"
+#include "secrets.h"
 
 // LoRa Pins
 #define SS 18
@@ -20,6 +22,7 @@
 
 // Functions
 void setupLoRa();
+void setupWiFi();
 
 // DHT
 DHT dht(DHTPIN, DHTTYPE);
@@ -31,9 +34,14 @@ void setup()
   Serial.begin(115200);
   Serial.println("LoRa Sender");
 
+  // Setup Pin Configuration
+  SPI.begin(SCK, MISO, MOSI, SS);
+  LoRa.setPins(SS, RST, DIO0);
+
   dht.begin();
-  
+
   setupLoRa();
+  setupWiFi();
 }
 
 void setupLoRa()
@@ -47,6 +55,15 @@ void setupLoRa()
   // Change sync word to match the receiver, ranges from 0-0xFF
   LoRa.setSyncWord(0xF3);
   Serial.println("LoRa Initializing OK!");
+}
+
+void setupWiFi()
+{
+  Serial.println("Starting WiFi-AP");
+  WiFi.softAP(WIFI_SSID, WIFI_PASSWORD);
+  Serial.println("Started WiFi-AP with the SSID: " + String(WIFI_SSID));
+  Serial.print("AP-IP: ");
+  Serial.println(WiFi.softAPIP());
 }
 
 void loop()
