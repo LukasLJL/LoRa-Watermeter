@@ -3,6 +3,7 @@
 #include <WiFi.h>
 #include <PubSubClient.h>
 #include <ArduinoJson.h>
+#include <WebConfig.h>
 #include "secrets.h"
 
 // LoRa Pins
@@ -30,6 +31,7 @@ void reconnect();
 void sendHomeAssistantDiscovery();
 void MQTTHomeAssistantDiscovery();
 void sendDeviceInformationMQTT();
+void handleRoot();
 
 // MQTT Client
 WiFiClient espClient;
@@ -38,6 +40,61 @@ PubSubClient client(espClient);
 // Variables
 unsigned long previousMillis = 0;
 long one_minute_interval = 1 * 60 * 1000UL;
+
+String params = "["
+  "{"
+  "'name':'wifi_ssid',"
+  "'label':'Name of WiFi',"
+  "'type':"+String(INPUTTEXT)+","
+  "'default':'MyIoTWiFi'"
+  "},"
+  "{"
+  "'name':'wifi_password',"
+  "'label':'WiFi Password',"
+  "'type':"+String(INPUTPASSWORD)+","
+  "'default':'MyPassword'"
+  "},"
+  "{"
+  "'name':'mqtt_host',"
+  "'label':'MQTT Host',"
+  "'type':"+String(INPUTTEXT)+","
+  "'default':'192.168.XX.XXX'"
+  "},"
+  "{"
+  "'name':'mqtt_port',"
+  "'label':'MQTT Port',"
+  "'type':"+String(INPUTNUMBER)+","
+  "'default':'1883'"
+  "},"
+  "{"
+  "'name':'mqtt_user',"
+  "'label':'MQTT User',"
+  "'type':"+String(INPUTTEXT)+","
+  "'default':'esp32-lora'"
+  "},"
+  "{"
+  "'name':'mqtt_password',"
+  "'label':'MQTT Password',"
+  "'type':"+String(INPUTPASSWORD)+","
+  "'default':'myPassword'"
+  "},"
+  "{"
+  "'name':'mqtt_client',"
+  "'label':'MQTT Client',"
+  "'type':"+String(INPUTTEXT)+","
+  "'default':'ESP32-LoRa-GW'"
+  "},"
+  "{"
+  "'name':'lora_code',"
+  "'label':'LoRa Code',"
+  "'type':"+String(INPUTTEXT)+","
+  "'default':'0xF3'"
+  "}"
+  "]";
+
+
+WebServer server;
+WebConfig conf;
 
 struct homeAssistantTopic
 {
@@ -55,6 +112,11 @@ void setup()
   Serial.begin(115200);
   Serial.println("LoRa Gateway");
 
+  // WebConfig
+  Serial.println(params);
+  conf.setDescription(params);
+  conf.readConfig();
+
   // Setup Pin Configuration
   SPI.begin(SCK, MISO, MOSI, SS);
   LoRa.setPins(SS, RST, DIO0);
@@ -65,6 +127,9 @@ void setup()
 
   MQTTHomeAssistantDiscovery();
   sendDeviceInformationMQTT();
+
+  server.on("/", handleRoot);
+  server.begin(80);
 }
 
 void setupLoRa()
@@ -192,6 +257,7 @@ void MQTTHomeAssistantDiscovery()
 
 void loop()
 {
+  server.handleClient();
 
   if (!client.connected())
   {
@@ -263,4 +329,20 @@ void sendDeviceInformationMQTT()
   serializeJson(payload, payloadSerialized);
 
   client.publish(mqttState, String(payloadSerialized).c_str(), true);
+}
+
+void handleRoot()
+{
+  conf.handleFormRequest(&server);
+  if (server.hasArg("SAVE"))
+  {
+    uint8_t cnt = conf.getCount();
+    Serial.println("*********** Configuration ************");
+    for (uint8_t i = 0; i < cnt; i++)
+    {
+      Serial.print(conf.getName(i));
+      Serial.print(" = ");
+      Serial.println(conf.values[i]);
+    }
+  }
 }
