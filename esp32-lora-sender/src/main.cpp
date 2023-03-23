@@ -24,7 +24,7 @@
 
 // Sensor Config
 #define DHTPIN 13
-#define DHTTYPE DHT11
+#define DHTTYPE DHT22
 
 // Functions
 void setupLoRa();
