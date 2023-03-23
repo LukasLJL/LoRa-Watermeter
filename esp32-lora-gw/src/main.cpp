@@ -3,6 +3,7 @@
 #include <WiFi.h>
 #include <PubSubClient.h>
 #include <ArduinoJson.h>
+#include <Preferences.h>
 #include "SPIFFS.h"
 #include "ESPAsyncWebServer.h"
 #include "secrets.h"
@@ -28,11 +29,11 @@
 void setupLoRa();
 void setupWiFi();
 void setupMQTT();
+void setupWebServer();
 void reconnect();
 void sendHomeAssistantDiscovery();
 void MQTTHomeAssistantDiscovery();
 void sendDeviceInformationMQTT();
-void handleRoot();
 
 // MQTT Client
 WiFiClient espClient;
@@ -42,6 +43,7 @@ PubSubClient client(espClient);
 unsigned long previousMillis = 0;
 long one_minute_interval = 1 * 60 * 1000UL;
 
+Preferences preferences;
 AsyncWebServer server(80);
 
 struct homeAssistantTopic
@@ -61,7 +63,8 @@ void setup()
   Serial.println("LoRa Gateway");
 
   // Initialize SPIFFS
-  if(!SPIFFS.begin(true)){
+  if (!SPIFFS.begin(true))
+  {
     Serial.println("An Error has occurred while mounting SPIFFS");
     return;
   }
@@ -72,26 +75,11 @@ void setup()
 
   setupLoRa();
   setupWiFi();
+  setupWebServer();
   setupMQTT();
 
   MQTTHomeAssistantDiscovery();
   sendDeviceInformationMQTT();
-  
-  server.on("/", HTTP_GET, [](AsyncWebServerRequest *request){
-    request->send(SPIFFS, "/index.html", String(), false);
-  });
-
-  server.on("/settings", HTTP_GET, [](AsyncWebServerRequest *request){
-    request->send(SPIFFS, "/settings.html", String(), false);
-  });
-
-  server.on("/style.css", HTTP_GET, [](AsyncWebServerRequest *request){
-    request->send(SPIFFS, "/style.css", "text/css");
-  });
-  
-  // Start server
-  server.begin();
-
 }
 
 void setupLoRa()
@@ -109,17 +97,34 @@ void setupLoRa()
 
 void setupWiFi()
 {
-  Serial.println("Connecting to WiFi...");
-  WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
-  WiFi.setHostname("esp32-lora-gw");
-  while (WiFi.status() != WL_CONNECTED)
+  String ssid;
+  String password;
+
+  preferences.begin("wifi-settings", true);
+  ssid = preferences.getString("ssid", "");
+  password = preferences.getString("password", "");
+  preferences.end();
+
+  if (ssid == "" || password == "")
   {
-    delay(1000);
-    Serial.println("Trying to connect to your WiFi...");
+    Serial.println("Creating WiFi-AP to setup device...");
+    WiFi.softAP(WIFI_SSID, WIFI_PASSWORD);
+    Serial.println("Started WiFi-AP with the SSID: " + String(WIFI_SSID));
   }
-  Serial.print("ESP32 IP-Address: ");
-  Serial.print(WiFi.localIP());
-  Serial.println("");
+  else
+  {
+    Serial.println("Connecting to WiFi...");
+    WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
+    WiFi.setHostname("esp32-lora-gw");
+    while (WiFi.status() != WL_CONNECTED)
+    {
+      delay(1000);
+      Serial.println("Trying to connect to your WiFi...");
+    }
+    Serial.print("ESP32 IP-Address: ");
+    Serial.print(WiFi.localIP());
+    Serial.println("");
+  }
 }
 
 void setupMQTT()
@@ -139,6 +144,45 @@ void setupMQTT()
     }
   }
   client.publish(mqttStatus, "connected", true);
+}
+
+void setupWebServer()
+{
+  server.on("/", HTTP_GET, [](AsyncWebServerRequest *request)
+            { request->send(SPIFFS, "/index.html", String(), false); });
+
+  server.on("/settings", HTTP_GET, [](AsyncWebServerRequest *request)
+            { request->send(SPIFFS, "/settings.html", String(), false); });
+
+  server.on("/style.css", HTTP_GET, [](AsyncWebServerRequest *request)
+            { request->send(SPIFFS, "/style.css", "text/css"); });
+
+  server.on("/save", HTTP_POST, [](AsyncWebServerRequest *request)
+            {
+
+    // WiFi
+    String ssid;
+    String password;
+    preferences.begin("wifi-settings", false);
+
+    if (request->hasParam("wifi-ssid", true)) {
+        ssid = request->getParam("wifi-ssid", true)->value();
+    }
+    if (request->hasParam("wifi-ssid", true)) {
+        password = request->getParam("wifi-password", true)->value();
+    }
+
+    if (ssid != "" && password != ""){
+      preferences.putString("ssid", ssid);
+      preferences.putString("password", password);
+    }
+      
+    preferences.end();
+    setupWiFi();
+    
+    request->send(200, "text/plain", "Added Wifi Settings"); });
+
+  server.begin();
 }
 
 void sendHomeAssistantDiscovery(homeAssistantTopic haTopic)
