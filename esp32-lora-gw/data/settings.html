@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <title>ESP32 LoRa Gateway</title>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="stylesheet" type="text/css" href="style.css">
+</head>
+
+<body>
+    <h1>ESP32 LoRa Gateway Settings</h1>
+    <form action="/save" , method="post">
+        <fieldset>
+            <legend>WiFi-Settings</legend>
+            <p>
+                <label for="wifi-ssid">SSID</label>
+                <input name="wifi-ssid" type="text">
+            </p>
+
+            <p>
+                <label for="wifi-password">Password</label>
+                <input name="wifi-password" type="password">
+            </p>
+        </fieldset>
+        <fieldset>
+            <legend>MQTT-Settings</legend>
+            <p>
+                <label for="mqtt-host">Host</label>
+                <input name="mqtt-host" type="text">
+            </p>
+
+            <p>
+                <label for="mqtt-port">Port</label>
+                <input name="mqtt-port" type="number">
+            </p>
+
+            <p>
+                <label for="mqtt-user">User</label>
+                <input name="mqtt-user" type="text">
+            </p>
+
+            <p>
+                <label for="mqtt-password">Password</label>
+                <input name="mqtt-password" type="password">
+            </p>
+
+            <p>
+                <label for="mqtt-client">Client-Name</label>
+                <input name="mqtt-client" type="text">
+            </p>
+        </fieldset>
+        <fieldset>
+            <legend>LoRa-Settings</legend>
+            <p>
+                <label for="lora-sync">Sync-Word</label>
+                <input name="lora-sync" type="text">
+            </p>
+        </fieldset>
+        <p class="center"><button class="button" type="submit">Save</button></p>
+    </form>
+    <p class="center"><a href="/"><button class="button">Back</button></a></p>
+</body>
+
+</html>

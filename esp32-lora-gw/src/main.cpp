@@ -3,7 +3,8 @@
 #include <WiFi.h>
 #include <PubSubClient.h>
 #include <ArduinoJson.h>
-#include <WebConfig.h>
+#include "SPIFFS.h"
+#include "ESPAsyncWebServer.h"
 #include "secrets.h"
 
 // LoRa Pins
@@ -41,60 +42,7 @@ PubSubClient client(espClient);
 unsigned long previousMillis = 0;
 long one_minute_interval = 1 * 60 * 1000UL;
 
-String params = "["
-  "{"
-  "'name':'wifi_ssid',"
-  "'label':'Name of WiFi',"
-  "'type':"+String(INPUTTEXT)+","
-  "'default':'MyIoTWiFi'"
-  "},"
-  "{"
-  "'name':'wifi_password',"
-  "'label':'WiFi Password',"
-  "'type':"+String(INPUTPASSWORD)+","
-  "'default':'MyPassword'"
-  "},"
-  "{"
-  "'name':'mqtt_host',"
-  "'label':'MQTT Host',"
-  "'type':"+String(INPUTTEXT)+","
-  "'default':'192.168.XX.XXX'"
-  "},"
-  "{"
-  "'name':'mqtt_port',"
-  "'label':'MQTT Port',"
-  "'type':"+String(INPUTNUMBER)+","
-  "'default':'1883'"
-  "},"
-  "{"
-  "'name':'mqtt_user',"
-  "'label':'MQTT User',"
-  "'type':"+String(INPUTTEXT)+","
-  "'default':'esp32-lora'"
-  "},"
-  "{"
-  "'name':'mqtt_password',"
-  "'label':'MQTT Password',"
-  "'type':"+String(INPUTPASSWORD)+","
-  "'default':'myPassword'"
-  "},"
-  "{"
-  "'name':'mqtt_client',"
-  "'label':'MQTT Client',"
-  "'type':"+String(INPUTTEXT)+","
-  "'default':'ESP32-LoRa-GW'"
-  "},"
-  "{"
-  "'name':'lora_code',"
-  "'label':'LoRa Code',"
-  "'type':"+String(INPUTTEXT)+","
-  "'default':'0xF3'"
-  "}"
-  "]";
-
-
-WebServer server;
-WebConfig conf;
+AsyncWebServer server(80);
 
 struct homeAssistantTopic
 {
@@ -112,10 +60,11 @@ void setup()
   Serial.begin(115200);
   Serial.println("LoRa Gateway");
 
-  // WebConfig
-  Serial.println(params);
-  conf.setDescription(params);
-  conf.readConfig();
+  // Initialize SPIFFS
+  if(!SPIFFS.begin(true)){
+    Serial.println("An Error has occurred while mounting SPIFFS");
+    return;
+  }
 
   // Setup Pin Configuration
   SPI.begin(SCK, MISO, MOSI, SS);
@@ -127,9 +76,22 @@ void setup()
 
   MQTTHomeAssistantDiscovery();
   sendDeviceInformationMQTT();
+  
+  server.on("/", HTTP_GET, [](AsyncWebServerRequest *request){
+    request->send(SPIFFS, "/index.html", String(), false);
+  });
 
-  server.on("/", handleRoot);
-  server.begin(80);
+  server.on("/settings", HTTP_GET, [](AsyncWebServerRequest *request){
+    request->send(SPIFFS, "/settings.html", String(), false);
+  });
+
+  server.on("/style.css", HTTP_GET, [](AsyncWebServerRequest *request){
+    request->send(SPIFFS, "/style.css", "text/css");
+  });
+  
+  // Start server
+  server.begin();
+
 }
 
 void setupLoRa()
@@ -257,8 +219,6 @@ void MQTTHomeAssistantDiscovery()
 
 void loop()
 {
-  server.handleClient();
-
   if (!client.connected())
   {
     reconnect();
@@ -329,20 +289,4 @@ void sendDeviceInformationMQTT()
   serializeJson(payload, payloadSerialized);
 
   client.publish(mqttState, String(payloadSerialized).c_str(), true);
-}
-
-void handleRoot()
-{
-  conf.handleFormRequest(&server);
-  if (server.hasArg("SAVE"))
-  {
-    uint8_t cnt = conf.getCount();
-    Serial.println("*********** Configuration ************");
-    for (uint8_t i = 0; i < cnt; i++)
-    {
-      Serial.print(conf.getName(i));
-      Serial.print(" = ");
-      Serial.println(conf.values[i]);
-    }
-  }
 }
