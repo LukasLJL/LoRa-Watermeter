@@ -5,10 +5,10 @@
 #include <WiFi.h>
 #include <ESP32Ping.h>
 #include <HTTPClient.h>
-#include <WebServer.h>
-#include <ESPmDNS.h>
-#include <WebConfig.h>
 #include <Ticker.h>
+#include <Preferences.h>
+#include "SPIFFS.h"
+#include "ESPAsyncWebServer.h"
 #include "DHT.h"
 #include "secrets.h"
 
@@ -30,9 +30,10 @@
 void setupLoRa();
 void setupWiFi();
 void setupTimer();
+void setupWebServer();
+String processor(const String& var);
 String getWatermeterIP();
 void sendLoRa();
-void handleRoot();
 
 // DHT
 DHT dht(DHTPIN, DHTTYPE);
@@ -41,30 +42,8 @@ DHT dht(DHTPIN, DHTTYPE);
 int counter = 0;
 String watermeterIP = "127.0.0.1";
 
-String params = "["
-  "{"
-  "'name':'ssid',"
-  "'label':'Name of WiFi',"
-  "'type':"+String(INPUTTEXT)+","
-  "'default':'MyIoTWiFi'"
-  "},"
-  "{"
-  "'name':'pwd',"
-  "'label':'WiFi Password',"
-  "'type':"+String(INPUTPASSWORD)+","
-  "'default':'MyPassword'"
-  "},"
-  "{"
-  "'name':'interval',"
-  "'label':'LoRa Interval in seconds',"
-  "'type':"+String(INPUTNUMBER)+","
-  "'min':1,'max':86400,"
-  "'default':'60'"
-  "}"
-  "]";
-
-WebServer server;
-WebConfig conf;
+Preferences preferences;
+AsyncWebServer server(80);
 Ticker timer;
 
 typedef struct
@@ -80,9 +59,13 @@ void setup()
   Serial.begin(115200);
   Serial.println("LoRa Sender");
 
-  Serial.println(params);
-  conf.setDescription(params);
-  conf.readConfig();
+  // Initialize SPIFFS
+  if (!SPIFFS.begin(true))
+  {
+    Serial.println("An Error has occurred while mounting SPIFFS");
+    return;
+  }
+
 
   // Setup Pin Configuration
   SPI.begin(SCK, MISO, MOSI, SS);
@@ -92,10 +75,8 @@ void setup()
 
   setupLoRa();
   setupWiFi();
+  setupWebServer();
   setupTimer();
-
-  server.on("/",handleRoot);
-  server.begin(80);
 }
 
 void setupLoRa()
@@ -115,40 +96,84 @@ void setupWiFi()
 {
   Serial.println("Starting WiFi-AP");
 
+  WiFi.softAP(WIFI_SSID, WIFI_PASSWORD);
+  Serial.println("Started WiFi-AP with the SSID: " + String(WIFI_SSID));
 
-
-  if (conf.values[0] != "")
-  {
-    WiFi.softAP(conf.values[0].c_str(),conf.values[1].c_str());
-    Serial.println("Started WiFi-AP with the SSID: " + conf.values[0]);
-  } else
-  {
-    WiFi.softAP(WIFI_SSID, WIFI_PASSWORD);
-    Serial.println("Started WiFi-AP with the SSID: " + String(WIFI_SSID));
-  }
-
-  
 
   Serial.print("AP-IP: ");
   Serial.println(WiFi.softAPIP());
 }
 
+void setupWebServer()
+{
+  server.on("/", HTTP_GET, [](AsyncWebServerRequest *request)
+            { request->send(SPIFFS, "/index.html", String(), false, processor); });
+
+  server.on("/settings", HTTP_GET, [](AsyncWebServerRequest *request)
+            { request->send(SPIFFS, "/settings.html", String(), false); });
+
+  server.on("/style.css", HTTP_GET, [](AsyncWebServerRequest *request)
+            { request->send(SPIFFS, "/style.css", "text/css"); });
+
+  server.on("/save", HTTP_POST, [](AsyncWebServerRequest *request)
+            {
+
+    
+    String ssid;
+    String password;
+    String interval;
+    String word;
+
+    preferences.begin("settings", false);
+
+    if (request->hasParam("wifi-ssid", true)) {
+        ssid = request->getParam("wifi-ssid", true)->value();
+    }
+    if (request->hasParam("wifi-ssid", true)) {
+        password = request->getParam("wifi-password", true)->value();
+    }
+    if (request->hasParam("lora-interval", true)) {
+        interval = request->getParam("lora-interval", true)->value();
+    }
+    if (request->hasParam("lora-word", true)) {
+        word = request->getParam("lora-word", true)->value();
+    }
+
+    if (ssid != "" && password != ""){
+      preferences.putString("ssid", ssid);
+      preferences.putString("password", password);
+    }
+      
+    preferences.end();
+    setupWiFi();
+    
+    request->send(200, "text/plain", "Added Settings"); });
+
+  server.begin();
+}
+
 void setupTimer()
 {
-  if (conf.values[2] != "")
-  {
-    timer.attach_ms(1000 * conf.getInt("interval"), sendLoRa); 
-    Serial.println("Started LoRa Interval with " + conf.values[2]);
-  } else
-  {
-    timer.attach_ms(10000, sendLoRa); 
-    Serial.println("Started LoRa Interval with " + 1);
+  timer.attach_ms(10000, sendLoRa); 
+  Serial.println("Started LoRa Interval with 10");
+}
+
+String processor(const String& var){
+  if(var == "TEMPERATURE"){
+    return String(dht.readTemperature());
   }
+  else if(var == "HUMIDITY"){
+    return String(dht.readHumidity());
+  }
+  else if(var == "WATERMETERIP"){
+    return watermeterIP;
+  }
+  return String();
 }
 
 void loop()
 {
-  server.handleClient();
+
 }
 
 watermeterMetric getWatermeterMetrics(String ip)
@@ -176,7 +201,6 @@ watermeterMetric getWatermeterMetrics(String ip)
 
 String getWatermeterIP()
 {
-   Serial.println("Send Water");
   for (int i = 2; i <= 254; i++)
   {
     IPAddress ip(192, 168, 4, i);
@@ -222,17 +246,4 @@ void sendLoRa()
   LoRa.endPacket();
 
   counter++;
-}
-
-void handleRoot() {
-  conf.handleFormRequest(&server);
-  if (server.hasArg("SAVE")) {
-    uint8_t cnt = conf.getCount();
-    Serial.println("*********** Configuration ************");
-    for (uint8_t i = 0; i<cnt; i++) {
-      Serial.print(conf.getName(i));
-      Serial.print(" = ");
-      Serial.println(conf.values[i]);
-    }
-  }
 }

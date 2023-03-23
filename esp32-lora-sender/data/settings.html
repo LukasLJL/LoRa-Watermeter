@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <title>ESP32 LoRa Sender</title>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="stylesheet" type="text/css" href="style.css">
+</head>
+
+<body>
+    <h1>ESP32 LoRa Sender Settings</h1>
+    <form action="/save", method="post">
+        <fieldset>
+            <legend>WiFi-Settings</legend>
+            <p>
+                <label for="wifi-ssid">SSID</label>
+                <input name="wifi-ssid" type="text">
+            </p>
+
+            <p>
+                <label for="wifi-password">Password</label>
+                <input name="wifi-password" type="password">
+            </p>
+        </fieldset>
+        <fieldset>
+            <legend>LoRa-Settings</legend>
+            <p>
+                <label for="lora-interval">Interval</label>
+                <input name="lora-interval" type="text">
+            </p>
+            <p>
+                <label for="lora-sync">Sync-Word</label>
+                <input name="lora-sync" type="text">
+            </p>
+        </fieldset>
+        <p class="center"><button class="button" type="submit">Save</button></p>
+    </form>
+    <p class="center"><a href="/"><button class="button">Back</button></a></p>
+</body>
+
+</html>

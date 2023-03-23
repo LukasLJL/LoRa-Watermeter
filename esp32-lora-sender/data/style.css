@@ -1,0 +1,50 @@
+html {
+    font-family: Helvetica;
+    display: inline-block;
+    margin: 0px auto;
+}
+
+h1 {
+    color: #0F3376;
+    padding: 2vh;
+    text-align: center;
+}
+
+p {
+    font-size: 1.5rem;
+}
+
+.center {
+    text-align: center;
+}
+
+.button {
+    display: inline-block;
+    background-color: #008CBA;
+    border: none;
+    border-radius: 4px;
+    color: white;
+    padding: 16px 40px;
+    text-decoration: none;
+    font-size: 30px;
+    margin: 2px;
+    cursor: pointer;
+}
+
+@media (min-width: 600px) {
+    form {
+        width: 50%;
+        margin: 0 auto;
+    }
+}
+
+input,
+select {
+    width: 100%;
+    padding: 12px 20px;
+    margin: 8px 0;
+    display: inline-block;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    box-sizing: border-box;
+}
