@@ -11,51 +11,51 @@
 
 <body>
     <h1>ESP32 LoRa Gateway Settings</h1>
-    <form action="/save", method="post">
+    <form action="/save" , method="post">
         <fieldset>
             <legend>WiFi-Settings</legend>
             <p>
                 <label for="wifi-ssid">SSID</label>
-                <input name="wifi-ssid" type="text">
+                <input name="wifi-ssid" type="text" value="%WIFI-SSID%" placeholder="myIoTWifi">
             </p>
 
             <p>
                 <label for="wifi-password">Password</label>
-                <input name="wifi-password" type="password">
+                <input name="wifi-password" type="password" value="%WIFI-PASSWORD%" placeholder="myPassword">
             </p>
         </fieldset>
         <fieldset>
             <legend>MQTT-Settings</legend>
             <p>
                 <label for="mqtt-host">Host</label>
-                <input name="mqtt-host" type="text">
+                <input name="mqtt-host" type="text" value="%MQTT-HOST%" placeholder="192.168.1.37">
             </p>
 
             <p>
                 <label for="mqtt-port">Port</label>
-                <input name="mqtt-port" type="number">
+                <input name="mqtt-port" type="number" value="%MQTT-PORT%" placeholder="1883">
             </p>
 
             <p>
                 <label for="mqtt-user">User</label>
-                <input name="mqtt-user" type="text">
+                <input name="mqtt-user" type="text" value="%MQTT-USER%" placeholder="esp32-gw-user">
             </p>
 
             <p>
                 <label for="mqtt-password">Password</label>
-                <input name="mqtt-password" type="password">
+                <input name="mqtt-password" type="password" value="%MQTT-PASSWORD%" placeholder="myMQTTPassword">
             </p>
 
             <p>
                 <label for="mqtt-client">Client-Name</label>
-                <input name="mqtt-client" type="text">
+                <input name="mqtt-client" type="text" value="%MQTT-CLIENT%" placeholder="ESP32-LoRa-GW">
             </p>
         </fieldset>
         <fieldset>
             <legend>LoRa-Settings</legend>
             <p>
                 <label for="lora-sync">Sync-Word</label>
-                <input name="lora-sync" type="text">
+                <input name="lora-sync" type="text" value="%LORA-SYNC%" placeholder="0xF3">
             </p>
         </fieldset>
         <p class="center"><button class="button" type="submit">Save</button></p>

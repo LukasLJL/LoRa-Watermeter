@@ -25,6 +25,16 @@
 #define mqttWaterMeter mqttChannel "/watermeter"
 #define mqttState mqttChannel "/state"
 
+// WebConfig Fields
+#define wifiSSID "wifi-ssid"
+#define wifiPassword "wifi-password"
+#define mqttHost "mqtt-host"
+#define mqttPort "mqtt-port"
+#define mqttUser "mqtt-user"
+#define mqttPassword "mqtt-password"
+#define mqttClient "mqtt-client"
+#define loraSync "lora-sync"
+
 // Functions
 void setupLoRa();
 void setupWiFi();
@@ -34,6 +44,7 @@ void reconnect();
 void sendHomeAssistantDiscovery();
 void MQTTHomeAssistantDiscovery();
 void sendDeviceInformationMQTT();
+String processor(const String &var);
 
 // MQTT Client
 WiFiClient espClient;
@@ -152,37 +163,104 @@ void setupWebServer()
             { request->send(SPIFFS, "/index.html", String(), false); });
 
   server.on("/settings", HTTP_GET, [](AsyncWebServerRequest *request)
-            { request->send(SPIFFS, "/settings.html", String(), false); });
+            { request->send(SPIFFS, "/settings.html", String(), false, processor); });
 
   server.on("/style.css", HTTP_GET, [](AsyncWebServerRequest *request)
             { request->send(SPIFFS, "/style.css", "text/css"); });
 
   server.on("/save", HTTP_POST, [](AsyncWebServerRequest *request)
             {
-
     // WiFi
-    String ssid;
-    String password;
     preferences.begin("wifi-settings", false);
-
-    if (request->hasParam("wifi-ssid", true)) {
-        ssid = request->getParam("wifi-ssid", true)->value();
+    if (request->hasParam(wifiSSID, true)) {
+      preferences.putString("ssid", request->getParam(wifiSSID, true)->value());
     }
-    if (request->hasParam("wifi-ssid", true)) {
-        password = request->getParam("wifi-password", true)->value();
-    }
-
-    if (ssid != "" && password != ""){
-      preferences.putString("ssid", ssid);
-      preferences.putString("password", password);
-    }
-      
+    if (request->hasParam(wifiPassword, true)) {
+      preferences.putString("password", request->getParam(wifiPassword, true)->value());
+    }  
     preferences.end();
-    setupWiFi();
+
+    //MQTT
+    preferences.begin("mqtt-settings", false);
+    if (request->hasParam(mqttHost, true)) {
+      preferences.putString("host", request->getParam(mqttHost, true)->value());
+    }
+    if (request->hasParam(mqttPort, true)) {
+      preferences.putString("port", request->getParam(mqttPort, true)->value());
+    }
+    if (request->hasParam(mqttUser, true)) {
+      preferences.putString("user", request->getParam(mqttUser, true)->value());
+    }
+    if (request->hasParam(mqttPassword, true)) {
+      preferences.putString("password", request->getParam(mqttPassword, true)->value());
+    }
+    if (request->hasParam(mqttClient, true)) {
+      preferences.putString("client", request->getParam(mqttClient, true)->value());
+    } 
+    preferences.end();
+
+    //LoRa
+    preferences.begin("lora-settings", false);
+    if (request->hasParam(mqttHost, true)) {
+      preferences.putString("sync", request->getParam(mqttHost, true)->value());
+    }
+    preferences.end();
+
+    //Restart
+    ESP.restart();
     
-    request->send(200, "text/plain", "Added Wifi Settings"); });
+    request->send(200, "text/plain", "Changed System Settings"); });
 
   server.begin();
+}
+
+String processor(const String &var)
+{
+  // WiFi-Properties
+  preferences.begin("wifi-settings", true);
+  if (var == "WIFI-SSID")
+  {
+    return String(preferences.getString("ssid", ""));
+  }
+  else if (var == "WIFI-PASSWORD")
+  {
+    return String(preferences.getString("password", ""));
+  }
+  preferences.end();
+
+  // MQTT-Properties
+  preferences.begin("mqtt-settings", true);
+  if (var == "MQTT-HOST")
+  {
+    return String(preferences.getString("host", ""));
+  }
+  else if (var == "MQTT-PORT")
+  {
+    return String(preferences.getString("port", ""));
+  }
+  else if (var == "MQTT-USER")
+  {
+    return String(preferences.getString("user", ""));
+  }
+  else if (var == "MQTT-PASSWORD")
+  {
+    return String(preferences.getString("password", ""));
+  }
+  else if (var == "MQTT-CLIENT")
+  {
+    return String(preferences.getString("client", ""));
+  }
+  preferences.end();
+
+  // LoRa-Properties
+  preferences.begin("lora-settings", true);
+  if (var == "LORA-SYNC")
+  {
+    return String(preferences.getString("sync", ""));
+  }
+  preferences.end();
+  
+  return String();
 }
 
 void sendHomeAssistantDiscovery(homeAssistantTopic haTopic)
