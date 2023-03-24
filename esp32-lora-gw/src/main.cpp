@@ -102,6 +102,15 @@ void setupLoRa()
   }
 
   // Change sync word to match the receiver, ranges from 0-0xFF
+  preferences.begin("lora-settings", true);
+  String syncWord = preferences.getString("sync", "");
+  preferences.end();
+
+  if (syncWord == "")
+  {
+    syncWord = "0xF3";
+  }
+
   LoRa.setSyncWord(0xF3);
   Serial.println("LoRa Initializing OK!");
 }
@@ -119,13 +128,13 @@ void setupWiFi()
   if (ssid == "" || password == "")
   {
     Serial.println("Creating WiFi-AP to setup device...");
-    WiFi.softAP(WIFI_SSID, WIFI_PASSWORD);
-    Serial.println("Started WiFi-AP with the SSID: " + String(WIFI_SSID));
+    WiFi.softAP(INIT_WIFI_SSID, INIT_WIFI_PASSWORD);
+    Serial.println("Started WiFi-AP with the SSID: " + String(INIT_WIFI_SSID));
   }
   else
   {
     Serial.println("Connecting to WiFi...");
-    WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
+    WiFi.begin(ssid.c_str(), password.c_str());
     WiFi.setHostname("esp32-lora-gw");
     while (WiFi.status() != WL_CONNECTED)
     {
@@ -140,21 +149,36 @@ void setupWiFi()
 
 void setupMQTT()
 {
-  client.setServer(MQTT_HOST, MQTT_PORT);
-  client.setBufferSize(1024);
-  while (!client.connected())
+  preferences.begin("mqtt-settings", true);
+  String host = preferences.getString("host", "");
+  int port = preferences.getInt("port", 1883);
+  String user = preferences.getString("user", "");
+  String password = preferences.getString("password", "");
+  String mqtt_client = preferences.getString("client", "ESP32-LoRa-GW");
+  preferences.end();
+
+  if (host != "" && user != "" && password != "")
   {
-    Serial.println("Attempting MQTT connection...");
-    if (client.connect(MQTT_CLIENT, MQTT_USER, MQTT_PASSWORD))
+    client.setServer(host.c_str(), port);
+    client.setBufferSize(1024);
+    while (!client.connected())
     {
-      Serial.println("MQTT connected with name: " MQTT_CLIENT);
+      Serial.println("Attempting MQTT connection...");
+      if (client.connect(mqtt_client.c_str(), user.c_str(), password.c_str()))
+      {
+        Serial.println("MQTT connected with name: " + String(mqtt_client));
+      }
+      else
+      {
+        Serial.println("MQTT connection failed.");
+      }
     }
-    else
-    {
-      Serial.println("MQTT connection failed.");
-    }
+    client.publish(mqttStatus, "connected", true);
   }
-  client.publish(mqttStatus, "connected", true);
+  else
+  {
+    Serial.println("No MQTT-Server configured!");
+  }
 }
 
 void setupWebServer()
@@ -186,7 +210,7 @@ void setupWebServer()
       preferences.putString("host", request->getParam(mqttHost, true)->value());
     }
     if (request->hasParam(mqttPort, true)) {
-      preferences.putString("port", request->getParam(mqttPort, true)->value());
+      preferences.putInt("port", request->getParam(mqttPort, true)->value().toInt());
     }
     if (request->hasParam(mqttUser, true)) {
       preferences.putString("user", request->getParam(mqttUser, true)->value());
@@ -201,8 +225,8 @@ void setupWebServer()
 
     //LoRa
     preferences.begin("lora-settings", false);
-    if (request->hasParam(mqttHost, true)) {
-      preferences.putString("sync", request->getParam(mqttHost, true)->value());
+    if (request->hasParam(loraSync, true)) {
+      preferences.putString("sync", request->getParam(loraSync, true)->value());
     }
     preferences.end();
 
@@ -236,7 +260,7 @@ String processor(const String &var)
   }
   else if (var == "MQTT-PORT")
   {
-    return String(preferences.getString("port", ""));
+    return String(preferences.getInt("port", 1883));
   }
   else if (var == "MQTT-USER")
   {
@@ -259,7 +283,7 @@ String processor(const String &var)
     return String(preferences.getString("sync", ""));
   }
   preferences.end();
-  
+
   return String();
 }
 
@@ -303,7 +327,10 @@ void sendHomeAssistantDiscovery(homeAssistantTopic haTopic)
   String payloadSerialized;
   serializeJson(payload, payloadSerialized);
 
-  client.publish(String(configTopic).c_str(), String(payloadSerialized).c_str(), true);
+  if (client.connected())
+  {
+    client.publish(String(configTopic).c_str(), String(payloadSerialized).c_str(), true);
+  }
 }
 
 void MQTTHomeAssistantDiscovery()
@@ -341,17 +368,15 @@ void MQTTHomeAssistantDiscovery()
 
 void loop()
 {
-  if (!client.connected())
-  {
-    reconnect();
-  }
-
   // Send Device Information only every minute
   unsigned long currentMillis = millis();
   if (currentMillis - previousMillis > one_minute_interval)
   {
     previousMillis = currentMillis;
-    sendDeviceInformationMQTT();
+    if (client.connected())
+    {
+      sendDeviceInformationMQTT();
+    }
   }
 
   // try to parse packet
@@ -367,9 +392,6 @@ void loop()
       String LoRaData = LoRa.readString();
       Serial.println(LoRaData);
 
-      // Send LoRa Data
-      client.publish(mqttState, String(LoRaData).c_str(), true);
-
       // Send LoRa RSSI
       const int capacityPayload = JSON_OBJECT_SIZE(1);
       StaticJsonDocument<capacityPayload> payload;
@@ -378,8 +400,17 @@ void loop()
       String payloadSerialized;
       serializeJson(payload, payloadSerialized);
 
-      client.publish(mqttState, String(payloadSerialized).c_str(), true);
+      if (client.connected())
+      {
+        client.publish(mqttState, String(LoRaData).c_str(), true);
+        client.publish(mqttState, String(payloadSerialized).c_str(), true);
+      }
     }
+  }
+
+  if (!client.connected())
+  {
+    reconnect();
   }
 }
 
