@@ -7,9 +7,9 @@
 #include <HTTPClient.h>
 #include <Ticker.h>
 #include <Preferences.h>
-#include "SPIFFS.h"
-#include "ESPAsyncWebServer.h"
-#include "DHT.h"
+#include <SPIFFS.h>
+#include <ESPAsyncWebServer.h>
+#include <DHT.h>
 #include "secrets.h"
 
 // LoRa Pins
@@ -31,7 +31,7 @@ void setupLoRa();
 void setupWiFi();
 void setupTimer();
 void setupWebServer();
-String processor(const String& var);
+String processor(const String &var);
 String getWatermeterIP();
 void sendLoRa();
 
@@ -66,7 +66,6 @@ void setup()
     return;
   }
 
-
   // Setup Pin Configuration
   SPI.begin(SCK, MISO, MOSI, SS);
   LoRa.setPins(SS, RST, DIO0);
@@ -98,7 +97,6 @@ void setupWiFi()
 
   WiFi.softAP(WIFI_SSID, WIFI_PASSWORD);
   Serial.println("Started WiFi-AP with the SSID: " + String(WIFI_SSID));
-
 
   Serial.print("AP-IP: ");
   Serial.println(WiFi.softAPIP());
@@ -154,18 +152,22 @@ void setupWebServer()
 
 void setupTimer()
 {
-  timer.attach_ms(10000, sendLoRa); 
+  timer.attach_ms(10000, sendLoRa);
   Serial.println("Started LoRa Interval with 10");
 }
 
-String processor(const String& var){
-  if(var == "TEMPERATURE"){
+String processor(const String &var)
+{
+  if (var == "TEMPERATURE")
+  {
     return String(dht.readTemperature());
   }
-  else if(var == "HUMIDITY"){
+  else if (var == "HUMIDITY")
+  {
     return String(dht.readHumidity());
   }
-  else if(var == "WATERMETERIP"){
+  else if (var == "WATERMETERIP")
+  {
     return watermeterIP;
   }
   return String();
@@ -173,7 +175,6 @@ String processor(const String& var){
 
 void loop()
 {
-
 }
 
 watermeterMetric getWatermeterMetrics(String ip)

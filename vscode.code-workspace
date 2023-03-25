@@ -9,5 +9,9 @@
 			"path": "esp32-lora-gw"
 		}
 	],
-	"settings": {}
+	"settings": {
+		"files.associations": {
+			"bitset": "cpp"
+		}
+	}
 }
