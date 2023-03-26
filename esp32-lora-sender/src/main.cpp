@@ -3,6 +3,7 @@
 #include <LoRa.h>
 #include <ArduinoJson.h>
 #include <WiFi.h>
+#include <esp_wifi.h>
 #include <ESP32Ping.h>
 #include <HTTPClient.h>
 #include <Ticker.h>
@@ -33,7 +34,6 @@ void setupWiFi();
 void setupTimer();
 void setupWebServer();
 String processor(const String &var);
-String getWatermeterIP();
 void sendLoRa();
 
 // DHT
@@ -246,6 +246,29 @@ String processor(const String &var)
 
 void loop()
 {
+  wifi_sta_list_t wifi_sta_list;
+  tcpip_adapter_sta_list_t adapter_sta_list;
+ 
+  memset(&wifi_sta_list, 0, sizeof(wifi_sta_list));
+  memset(&adapter_sta_list, 0, sizeof(adapter_sta_list));
+ 
+  esp_wifi_ap_get_sta_list(&wifi_sta_list);
+  tcpip_adapter_get_sta_list(&wifi_sta_list, &adapter_sta_list);
+
+  int count = adapter_sta_list.num;
+  if (count > 0) {
+    String ips[count];
+    for (int i = 0; i < adapter_sta_list.num; i++) {
+ 
+      tcpip_adapter_sta_info_t station = adapter_sta_list.sta[i];
+ 
+      char ip[IP4ADDR_STRLEN_MAX];
+      esp_ip4addr_ntoa(&station.ip, ip, IP4ADDR_STRLEN_MAX);
+      ips[i] = ip;
+    }
+    watermeterIP = ips[0];
+  }
+  delay(10000);
 }
 
 watermeterMetric getWatermeterMetrics(String ip)
@@ -271,28 +294,8 @@ watermeterMetric getWatermeterMetrics(String ip)
   return watermeterMetric{1337, 1336};
 }
 
-String getWatermeterIP()
-{
-  for (int i = 2; i <= 254; i++)
-  {
-    IPAddress ip(192, 168, 4, i);
-    bool res = Ping.ping(ip);
-    if (res)
-    {
-      Serial.println("Found WiFi-Device with IP: " + ip.toString());
-      return ip.toString();
-    }
-  }
-  return "127.0.0.1";
-}
-
 void sendLoRa()
 {
-  // Caching Watermeter IP-Address
-  if (watermeterIP == "127.0.0.1")
-  {
-    watermeterIP = getWatermeterIP();
-  }
 
   watermeterMetric watermeterResult = getWatermeterMetrics(watermeterIP);
 
