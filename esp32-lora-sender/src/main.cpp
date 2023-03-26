@@ -49,8 +49,12 @@ Ticker timer;
 
 typedef struct
 {
-  int current;
-  int previous;
+  float current;
+  float previous;
+  String raw;
+  String error;
+  String rate;
+  bool failed;
 } watermeterMetric;
 
 typedef struct
@@ -90,13 +94,14 @@ void setup()
   setupTimer();
 }
 
-void setupPreferences(){
-
+void setupPreferences()
+{
 
   preferences.begin("settings", true);
-  bool tpInit = preferences.isKey("hasInit"); 
+  bool tpInit = preferences.isKey("hasInit");
 
-  if (tpInit == false) {
+  if (tpInit == false)
+  {
     Serial.println("Inital preferences setup...");
     preferences.end();
     preferences.begin("settings", false);
@@ -109,7 +114,7 @@ void setupPreferences(){
     preferences.putBool("hasInit", true);
 
     preferences.end();
-    preferences.begin("settings", true); 
+    preferences.begin("settings", true);
   }
 
   Serial.println("Loading preferences");
@@ -198,8 +203,7 @@ void setupWebServer()
     
     request->send(200, "text/plain", "Saved settings. Rebooting...");
     delay(500);
-    ESP.restart();
-    });
+    ESP.restart(); });
 
   server.begin();
 }
@@ -243,25 +247,26 @@ String processor(const String &var)
   return String();
 }
 
-
 void loop()
 {
   wifi_sta_list_t wifi_sta_list;
   tcpip_adapter_sta_list_t adapter_sta_list;
- 
+
   memset(&wifi_sta_list, 0, sizeof(wifi_sta_list));
   memset(&adapter_sta_list, 0, sizeof(adapter_sta_list));
- 
+
   esp_wifi_ap_get_sta_list(&wifi_sta_list);
   tcpip_adapter_get_sta_list(&wifi_sta_list, &adapter_sta_list);
 
   int count = adapter_sta_list.num;
-  if (count > 0) {
+  if (count > 0)
+  {
     String ips[count];
-    for (int i = 0; i < adapter_sta_list.num; i++) {
- 
+    for (int i = 0; i < adapter_sta_list.num; i++)
+    {
+
       tcpip_adapter_sta_info_t station = adapter_sta_list.sta[i];
- 
+
       char ip[IP4ADDR_STRLEN_MAX];
       esp_ip4addr_ntoa(&station.ip, ip, IP4ADDR_STRLEN_MAX);
       ips[i] = ip;
@@ -273,8 +278,9 @@ void loop()
 
 watermeterMetric getWatermeterMetrics(String ip)
 {
+  watermeterMetric metrics;
   HTTPClient http;
-  String url = ip + "/json";
+  String url = "http://" + ip + "/json";
   http.begin(url.c_str());
 
   int resCode = http.GET();
@@ -283,15 +289,26 @@ watermeterMetric getWatermeterMetrics(String ip)
   {
     String payload = http.getString();
     Serial.println(payload);
+
+    DynamicJsonDocument doc(1024);
+    deserializeJson(doc, payload);
+
+    metrics = watermeterMetric{doc["main"]["value"],
+                               doc["main"]["pre"],
+                               doc["main"]["raw"],
+                               doc["main"]["error"],
+                               doc["main"]["rate"],
+                               false};
   }
   else
   {
     Serial.print("Error code: ");
     Serial.println(resCode);
+    metrics = watermeterMetric{0, 0, "", "", "", true};
   }
 
   http.end();
-  return watermeterMetric{1337, 1336};
+  return metrics;
 }
 
 void sendLoRa()
@@ -300,13 +317,26 @@ void sendLoRa()
   watermeterMetric watermeterResult = getWatermeterMetrics(watermeterIP);
 
   // Manage LoRa-Payload
-  StaticJsonDocument<96> payload;
+  StaticJsonDocument<192> payload;
 
   payload["humidity"] = dht.readHumidity();
   payload["temperature"] = dht.readTemperature();
   payload["packet_number"] = counter;
-  payload["current-meter"] = watermeterResult.current;
-  payload["pre-meter"] = watermeterResult.previous;
+
+  JsonObject watermeter = payload.createNestedObject("watermeter");
+
+  if (!watermeterResult.failed)
+  {
+    if (watermeterResult.current > watermeterResult.previous)
+    {
+      watermeter["current"] = watermeterResult.current;
+    }
+    watermeter["previous"] = watermeterResult.previous;
+    watermeter["raw"] = watermeterResult.raw;
+    watermeter["rate"] = watermeterResult.rate;
+    watermeter["error"] = watermeterResult.error;
+  }
+
   payload["message"] = "Hello";
 
   String payloadSerialized;
