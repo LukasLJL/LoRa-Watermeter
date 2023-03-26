@@ -16,23 +16,23 @@
             <legend>WiFi-Settings</legend>
             <p>
                 <label for="wifi-ssid">SSID</label>
-                <input name="wifi-ssid" type="text">
+                <input name="wifi-ssid" type="text" value="%CONFIG_SSID%">
             </p>
 
             <p>
                 <label for="wifi-password">Password</label>
-                <input name="wifi-password" type="password">
+                <input name="wifi-password" type="password" value="%CONFIG_PASSWORD%">
             </p>
         </fieldset>
         <fieldset>
             <legend>LoRa-Settings</legend>
             <p>
                 <label for="lora-interval">Interval</label>
-                <input name="lora-interval" type="text">
+                <input name="lora-interval" type="number" value="%CONFIG_INTERVAL%" min="1">
             </p>
             <p>
                 <label for="lora-sync">Sync-Word</label>
-                <input name="lora-sync" type="text">
+                <input name="lora-sync" type="number" value="%CONFIG_WORD%" min="0" max="255">
             </p>
         </fieldset>
         <p class="center"><button class="button" type="submit">Save</button></p>

@@ -27,6 +27,7 @@
 #define DHTTYPE DHT22
 
 // Functions
+void setupPreferences();
 void setupLoRa();
 void setupWiFi();
 void setupTimer();
@@ -52,6 +53,16 @@ typedef struct
   int previous;
 } watermeterMetric;
 
+typedef struct
+{
+  String ssid;
+  String password;
+  uint32_t interval;
+  uint32_t word;
+} Config;
+
+Config config;
+
 watermeterMetric getWatermeterMetrics(String);
 
 void setup()
@@ -72,10 +83,42 @@ void setup()
 
   dht.begin();
 
+  setupPreferences();
   setupLoRa();
   setupWiFi();
   setupWebServer();
   setupTimer();
+}
+
+void setupPreferences(){
+
+
+  preferences.begin("settings", true);
+  bool tpInit = preferences.isKey("hasInit"); 
+
+  if (tpInit == false) {
+    Serial.println("Inital preferences setup...");
+    preferences.end();
+    preferences.begin("settings", false);
+
+    preferences.putString("wifi-ssid", WIFI_SSID);
+    preferences.putString("wifi-password", WIFI_PASSWORD);
+    preferences.putUInt("lora-interval", 10);
+    preferences.putUInt("lora-word", 0xF3);
+
+    preferences.putBool("hasInit", true);
+
+    preferences.end();
+    preferences.begin("settings", true); 
+  }
+
+  Serial.println("Loading preferences");
+  config.ssid = preferences.getString("wifi-ssid");
+  config.password = preferences.getString("wifi-password");
+  config.interval = preferences.getUInt("lora-interval");
+  config.word = preferences.getUInt("lora-word");
+
+  preferences.end();
 }
 
 void setupLoRa()
@@ -87,16 +130,16 @@ void setupLoRa()
   }
 
   // Change sync word to match the receiver, ranges from 0-0xFF
-  LoRa.setSyncWord(0xF3);
-  Serial.println("LoRa Initializing OK!");
+  LoRa.setSyncWord(config.word);
+  Serial.println("LoRa Initializing OK! With Sync Word " + String(config.word));
 }
 
 void setupWiFi()
 {
   Serial.println("Starting WiFi-AP");
 
-  WiFi.softAP(WIFI_SSID, WIFI_PASSWORD);
-  Serial.println("Started WiFi-AP with the SSID: " + String(WIFI_SSID));
+  WiFi.softAP(config.ssid, config.password);
+  Serial.println("Started WiFi-AP with the SSID: " + config.ssid);
 
   Serial.print("AP-IP: ");
   Serial.println(WiFi.softAPIP());
@@ -108,7 +151,7 @@ void setupWebServer()
             { request->send(SPIFFS, "/index.html", String(), false, processor); });
 
   server.on("/settings", HTTP_GET, [](AsyncWebServerRequest *request)
-            { request->send(SPIFFS, "/settings.html", String(), false); });
+            { request->send(SPIFFS, "/settings.html", String(), false, processor); });
 
   server.on("/style.css", HTTP_GET, [](AsyncWebServerRequest *request)
             { request->send(SPIFFS, "/style.css", "text/css"); });
@@ -116,44 +159,55 @@ void setupWebServer()
   server.on("/save", HTTP_POST, [](AsyncWebServerRequest *request)
             {
 
-    
-    String ssid;
-    String password;
-    String interval;
-    String word;
-
-    preferences.begin("settings", false);
+    Config newConfig;
 
     if (request->hasParam("wifi-ssid", true)) {
-        ssid = request->getParam("wifi-ssid", true)->value();
+        String ssid = request->getParam("wifi-ssid", true)->value();
+        newConfig.ssid = ssid;
     }
     if (request->hasParam("wifi-ssid", true)) {
-        password = request->getParam("wifi-password", true)->value();
+        String password = request->getParam("wifi-password", true)->value();
+        newConfig.password = password;
     }
     if (request->hasParam("lora-interval", true)) {
-        interval = request->getParam("lora-interval", true)->value();
+        String interval = request->getParam("lora-interval", true)->value();
+        newConfig.interval = static_cast<uint32_t>(interval.toInt());
     }
     if (request->hasParam("lora-word", true)) {
-        word = request->getParam("lora-word", true)->value();
+        String word = request->getParam("lora-word", true)->value();
+        newConfig.word = static_cast<uint32_t>(word.toInt());
     }
 
-    if (ssid != "" && password != ""){
-      preferences.putString("ssid", ssid);
-      preferences.putString("password", password);
+    
+    preferences.begin("settings", false);
+
+    if (newConfig.ssid != ""){
+      preferences.putString("wifi-ssid", newConfig.ssid);
+    }
+    if (newConfig.password != "") {
+      preferences.putString("wifi-password", newConfig.password);
+    }
+    if (newConfig.interval) {
+      preferences.putUInt("lora-interval", newConfig.interval);
+    }
+    if (newConfig.word) {
+      preferences.putUInt("lora-word", newConfig.word);
     }
       
     preferences.end();
-    setupWiFi();
     
-    request->send(200, "text/plain", "Added Settings"); });
+    request->send(200, "text/plain", "Saved settings. Rebooting...");
+    delay(500);
+    ESP.restart();
+    });
 
   server.begin();
 }
 
 void setupTimer()
 {
-  timer.attach_ms(10000, sendLoRa);
-  Serial.println("Started LoRa Interval with 10");
+  timer.attach_ms(1000 * config.interval, sendLoRa);
+  Serial.println("Started LoRa Interval with " + String(config.interval) + " seconds.");
 }
 
 String processor(const String &var)
@@ -170,8 +224,25 @@ String processor(const String &var)
   {
     return watermeterIP;
   }
+  else if (var == "CONFIG_SSID")
+  {
+    return config.ssid;
+  }
+  else if (var == "CONFIG_PASSWORD")
+  {
+    return config.password;
+  }
+  else if (var == "CONFIG_INTERVAL")
+  {
+    return String(config.interval);
+  }
+  else if (var == "CONFIG_WORD")
+  {
+    return String(config.word);
+  }
   return String();
 }
+
 
 void loop()
 {
