@@ -294,7 +294,7 @@ String processor(const String &var)
 
 void sendHomeAssistantDiscovery(HomeAssistantTopic haTopic)
 {
-  const int capacityPayload = JSON_OBJECT_SIZE(26);
+  const int capacityPayload = JSON_OBJECT_SIZE(30);
   StaticJsonDocument<capacityPayload> payload;
 
   String mainTopic = mqttChannel;
@@ -305,7 +305,8 @@ void sendHomeAssistantDiscovery(HomeAssistantTopic haTopic)
   device["model"] = "LoRa-Watermeter";
   device["manufacturer"] = "IoT";
   device["name"] = "LoRa-Watermeter";
-  device["sw_version"] = "0.0.1";
+  device["sw_version"] = "0.0.2";
+  device["configuration_url"] = "http://" + WiFi.localIP().toString();
 
   payload["~"] = mainTopic;
   payload["unique_id"] = "esp32-lora-gw-" + haTopic.field;
@@ -326,8 +327,14 @@ void sendHomeAssistantDiscovery(HomeAssistantTopic haTopic)
     payload["state_class"] = haTopic.stateClass;
   }
 
-  // For later use, need to set all atributes for every sensor/topic
-  // payload["entity_category"] = haTopic.entityCategory;
+  if (haTopic.entityCategory == "watermeter")
+  {
+    payload["value_template"] = "{{ value_json.watermeter." + haTopic.field + " }}";
+  }
+  else if (haTopic.entityCategory != "")
+  {
+    payload["entity_category"] = haTopic.entityCategory;
+  }
 
   String payloadSerialized;
   serializeJson(payload, payloadSerialized);
@@ -356,15 +363,21 @@ void MQTTHomeAssistantDiscovery()
   sendHomeAssistantDiscovery(ip);
 
   // sensor information
-  HomeAssistantTopic currentMeterValue = HomeAssistantTopic{"current-meter", "Water Consumption", "gauge", "m^3", "", "", ""};
-  HomeAssistantTopic preMeterValue = HomeAssistantTopic{"pre-meter", "Previous Water Consumption", "gauge", "m^3", "", "", ""};
+  HomeAssistantTopic watermeterValue = HomeAssistantTopic{"value", "Water Consumption", "gauge", "m^3", "", "", "watermeter"};
+  HomeAssistantTopic watermeterPrevious = HomeAssistantTopic{"previous", "Previous Water Consumption", "gauge", "m^3", "", "", "watermeter"};
+  HomeAssistantTopic watermeterRaw = HomeAssistantTopic{"raw", "RAW Reading", "message", "", "", "", "watermeter"};
+  HomeAssistantTopic watermeterRate = HomeAssistantTopic{"rate", "Water Rate", "gauge", "m^3", "", "", "watermeter"};
+  HomeAssistantTopic watermeterError = HomeAssistantTopic{"error", "Watermeter Error", "message", "", "", "", "watermeter"};
   HomeAssistantTopic temperature = HomeAssistantTopic{"temperature", "Temperature Forest", "thermometer", "°C", "", "", ""};
   HomeAssistantTopic humidity = HomeAssistantTopic{"humidity", "Humidity Forest", "water-percent", "%", "", "", ""};
   HomeAssistantTopic message = HomeAssistantTopic{"message", "LoRa Message", "message", "", "", "", ""};
   HomeAssistantTopic packet_number = HomeAssistantTopic{"packet_number", "LoRa Packet Number", "counter", "", "", "", ""};
 
-  sendHomeAssistantDiscovery(currentMeterValue);
-  sendHomeAssistantDiscovery(preMeterValue);
+  sendHomeAssistantDiscovery(watermeterValue);
+  sendHomeAssistantDiscovery(watermeterPrevious);
+  sendHomeAssistantDiscovery(watermeterRaw);
+  sendHomeAssistantDiscovery(watermeterRate);
+  sendHomeAssistantDiscovery(watermeterError);
   sendHomeAssistantDiscovery(temperature);
   sendHomeAssistantDiscovery(humidity);
   sendHomeAssistantDiscovery(message);
