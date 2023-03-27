@@ -42,9 +42,10 @@ void setupTimer();
 void setupWebServer();
 void reconnect();
 void sendHomeAssistantDiscovery();
-void MQTTHomeAssistantDiscovery();
+void mqttHomeAssistantDiscovery();
 void sendDeviceInformationMQTT();
-String processor(const String &var);
+String processorConfig(const String &var);
+String processorStats(const String &var);
 
 // MQTT Client
 WiFiClient espClient;
@@ -55,6 +56,7 @@ uint32_t interval = 60;
 Preferences preferences;
 AsyncWebServer server(80);
 Ticker timer;
+String loraData;
 
 typedef struct
 {
@@ -89,7 +91,7 @@ void setup()
   setupMQTT();
   setupTimer();
 
-  MQTTHomeAssistantDiscovery();
+  mqttHomeAssistantDiscovery();
   sendDeviceInformationMQTT();
 }
 
@@ -103,16 +105,11 @@ void setupLoRa()
 
   // Change sync word to match the receiver, ranges from 0-0xFF
   preferences.begin("lora-settings", true);
-  String syncWord = preferences.getString("sync", "");
+  uint32_t syncWord = preferences.getUInt("sync", 243);
   preferences.end();
 
-  if (syncWord == "")
-  {
-    syncWord = "0xF3";
-  }
-
-  LoRa.setSyncWord(0xF3);
-  Serial.println("LoRa Initializing OK!");
+  LoRa.setSyncWord(syncWord);
+  Serial.println("LoRa Initializing OK! With Sync Word " + String(syncWord));
 }
 
 void setupWiFi()
@@ -190,10 +187,10 @@ void setupTimer()
 void setupWebServer()
 {
   server.on("/", HTTP_GET, [](AsyncWebServerRequest *request)
-            { request->send(SPIFFS, "/index.html", String(), false); });
+            { request->send(SPIFFS, "/index.html", String(), false, processorStats); });
 
   server.on("/settings", HTTP_GET, [](AsyncWebServerRequest *request)
-            { request->send(SPIFFS, "/settings.html", String(), false, processor); });
+            { request->send(SPIFFS, "/settings.html", String(), false, processorConfig); });
 
   server.on("/style.css", HTTP_GET, [](AsyncWebServerRequest *request)
             { request->send(SPIFFS, "/style.css", "text/css"); });
@@ -232,7 +229,7 @@ void setupWebServer()
     //LoRa
     preferences.begin("lora-settings", false);
     if (request->hasParam(loraSync, true)) {
-      preferences.putString("sync", request->getParam(loraSync, true)->value());
+      preferences.putUInt("sync", request->getParam(loraSync, true)->value().toInt());
     }
     preferences.end();
 
@@ -243,7 +240,40 @@ void setupWebServer()
   server.begin();
 }
 
-String processor(const String &var)
+String processorStats(const String &var)
+{
+  DynamicJsonDocument doc(1024);
+  deserializeJson(doc, loraData);
+
+  if (var == "TEMPERATURE")
+  {
+    return doc["temperature"].as<String>();
+  }
+  else if (var == "HUMIDITY")
+  {
+    return doc["humidity"].as<String>();
+  }
+  else if (var == "WATER_VALUE")
+  {
+    return doc["watermeter"]["value"].as<String>();
+  }
+  else if (var == "WATER_PREV")
+  {
+    return doc["watermeter"]["previous"].as<String>();
+  }
+  else if (var == "WATER_RAW")
+  {
+    return doc["watermeter"]["raw"].as<String>();
+  }
+  else if (var == "WIFI_SIGNAL")
+  {
+    return String(WiFi.RSSI());
+  }
+
+  return String();
+}
+
+String processorConfig(const String &var)
 {
   // WiFi-Properties
   preferences.begin("wifi-settings", true);
@@ -285,7 +315,7 @@ String processor(const String &var)
   preferences.begin("lora-settings", true);
   if (var == "LORA-SYNC")
   {
-    return String(preferences.getString("sync", ""));
+    return String(preferences.getUInt("sync"));
   }
   preferences.end();
 
@@ -345,7 +375,7 @@ void sendHomeAssistantDiscovery(HomeAssistantTopic haTopic)
   }
 }
 
-void MQTTHomeAssistantDiscovery()
+void mqttHomeAssistantDiscovery()
 {
   // diagnostic information
   HomeAssistantTopic uptime = HomeAssistantTopic{"uptime", "Uptime", "clock-time-eight-outline", "s", "", "", "diagnostic"};
@@ -396,8 +426,8 @@ void loop()
     // read packet
     while (LoRa.available())
     {
-      String LoRaData = LoRa.readString();
-      Serial.println(LoRaData);
+      loraData = LoRa.readString();
+      Serial.println(loraData);
 
       // Send LoRa RSSI
       const int capacityPayload = JSON_OBJECT_SIZE(1);
@@ -409,7 +439,7 @@ void loop()
 
       if (client.connected())
       {
-        client.publish(mqttState, String(LoRaData).c_str(), true);
+        client.publish(mqttState, String(loraData).c_str(), true);
         client.publish(mqttState, String(payloadSerialized).c_str(), true);
       }
     }
