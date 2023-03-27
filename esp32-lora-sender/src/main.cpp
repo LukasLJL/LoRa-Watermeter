@@ -55,7 +55,7 @@ typedef struct
   String error;
   String rate;
   bool failed;
-} watermeterMetric;
+} WatermeterMetric;
 
 typedef struct
 {
@@ -67,7 +67,7 @@ typedef struct
 
 Config config;
 
-watermeterMetric getWatermeterMetrics(String);
+WatermeterMetric getWatermeterMetrics(String);
 
 void setup()
 {
@@ -276,9 +276,9 @@ void loop()
   delay(10000);
 }
 
-watermeterMetric getWatermeterMetrics(String ip)
+WatermeterMetric getWatermeterMetrics(String ip)
 {
-  watermeterMetric metrics;
+  WatermeterMetric metrics;
   HTTPClient http;
   String url = "http://" + ip + "/json";
   http.begin(url.c_str());
@@ -293,7 +293,7 @@ watermeterMetric getWatermeterMetrics(String ip)
     DynamicJsonDocument doc(1024);
     deserializeJson(doc, payload);
 
-    metrics = watermeterMetric{doc["main"]["value"],
+    metrics = WatermeterMetric{doc["main"]["value"],
                                doc["main"]["pre"],
                                doc["main"]["raw"],
                                doc["main"]["error"],
@@ -304,7 +304,7 @@ watermeterMetric getWatermeterMetrics(String ip)
   {
     Serial.print("Error code: ");
     Serial.println(resCode);
-    metrics = watermeterMetric{0, 0, "", "", "", true};
+    metrics = WatermeterMetric{0, 0, "", "", "", true};
   }
 
   http.end();
@@ -314,7 +314,7 @@ watermeterMetric getWatermeterMetrics(String ip)
 void sendLoRa()
 {
 
-  watermeterMetric watermeterResult = getWatermeterMetrics(watermeterIP);
+  WatermeterMetric watermeterResult = getWatermeterMetrics(watermeterIP);
 
   // Manage LoRa-Payload
   StaticJsonDocument<192> payload;
