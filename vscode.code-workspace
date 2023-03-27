@@ -7,6 +7,12 @@
 		{
 			"name": "esp32-lora-gw",
 			"path": "esp32-lora-gw"
+		},
+		{
+			"path": "watermeter"
+		},
+		{
+			"path": "demo"
 		}
 	],
 	"settings": {
