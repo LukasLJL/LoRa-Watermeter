@@ -6,6 +6,7 @@
 #include <Preferences.h>
 #include <SPIFFS.h>
 #include <ESPAsyncWebServer.h>
+#include <Ticker.h>
 #include "secrets.h"
 
 // LoRa Pins
@@ -21,8 +22,6 @@
 // MQTT Topics/Channels
 #define mqttChannel "esp32-lora-gw"
 #define mqttStatus mqttChannel "/status"
-#define mqttSensor mqttChannel "/sensor"
-#define mqttWaterMeter mqttChannel "/watermeter"
 #define mqttState mqttChannel "/state"
 
 // WebConfig Fields
@@ -39,6 +38,7 @@
 void setupLoRa();
 void setupWiFi();
 void setupMQTT();
+void setupTimer();
 void setupWebServer();
 void reconnect();
 void sendHomeAssistantDiscovery();
@@ -51,13 +51,12 @@ WiFiClient espClient;
 PubSubClient client(espClient);
 
 // Variables
-unsigned long previousMillis = 0;
-long one_minute_interval = 1 * 60 * 1000UL;
-
+uint32_t interval = 60;
 Preferences preferences;
 AsyncWebServer server(80);
+Ticker timer;
 
-struct homeAssistantTopic
+typedef struct
 {
   String field;
   String name;
@@ -66,7 +65,7 @@ struct homeAssistantTopic
   String deviceClass;
   String stateClass;
   String entityCategory;
-};
+} HomeAssistantTopic;
 
 void setup()
 {
@@ -88,6 +87,7 @@ void setup()
   setupWiFi();
   setupWebServer();
   setupMQTT();
+  setupTimer();
 
   MQTTHomeAssistantDiscovery();
   sendDeviceInformationMQTT();
@@ -181,6 +181,12 @@ void setupMQTT()
   }
 }
 
+void setupTimer()
+{
+  timer.attach_ms(1000 * interval, sendDeviceInformationMQTT);
+  Serial.println("Started Timer for device information with interval " + String(interval) + " seconds.");
+}
+
 void setupWebServer()
 {
   server.on("/", HTTP_GET, [](AsyncWebServerRequest *request)
@@ -230,10 +236,9 @@ void setupWebServer()
     }
     preferences.end();
 
-    //Restart
-    ESP.restart();
-    
-    request->send(200, "text/plain", "Changed System Settings"); });
+    request->send(200, "text/plain", "Saved settings. Rebooting...");
+    delay(500);
+    ESP.restart(); });
 
   server.begin();
 }
@@ -287,7 +292,7 @@ String processor(const String &var)
   return String();
 }
 
-void sendHomeAssistantDiscovery(homeAssistantTopic haTopic)
+void sendHomeAssistantDiscovery(HomeAssistantTopic haTopic)
 {
   const int capacityPayload = JSON_OBJECT_SIZE(26);
   StaticJsonDocument<capacityPayload> payload;
@@ -336,12 +341,12 @@ void sendHomeAssistantDiscovery(homeAssistantTopic haTopic)
 void MQTTHomeAssistantDiscovery()
 {
   // diagnostic information
-  struct homeAssistantTopic uptime = {"uptime", "Uptime", "clock-time-eight-outline", "s", "", "", "diagnostic"};
-  struct homeAssistantTopic MAC = {"mac", "MAC-Address", "network-outline", "", "", "", "diagnostic"};
-  struct homeAssistantTopic hostname = {"hostname", "Hostname", "network-outline", "", "", "", "diagnostic"};
-  struct homeAssistantTopic wifiRSSI = {"wifiRSSI", "WiFi-RSSI", "wifi", "dBm", "signal_strength", "", "diagnostic"};
-  struct homeAssistantTopic loraRSSI = {"loraRSSI", "LoRa-RSSI", "wifi", "dBm", "signal_strength", "", "diagnostic"};
-  struct homeAssistantTopic ip = {"ip", "IP", "network-outline", "", "", "", "diagnostic"};
+  HomeAssistantTopic uptime = HomeAssistantTopic{"uptime", "Uptime", "clock-time-eight-outline", "s", "", "", "diagnostic"};
+  HomeAssistantTopic MAC = HomeAssistantTopic{"mac", "MAC-Address", "network-outline", "", "", "", "diagnostic"};
+  HomeAssistantTopic hostname = HomeAssistantTopic{"hostname", "Hostname", "network-outline", "", "", "", "diagnostic"};
+  HomeAssistantTopic wifiRSSI = HomeAssistantTopic{"wifiRSSI", "WiFi-RSSI", "wifi", "dBm", "signal_strength", "", "diagnostic"};
+  HomeAssistantTopic loraRSSI = HomeAssistantTopic{"loraRSSI", "LoRa-RSSI", "wifi", "dBm", "signal_strength", "", "diagnostic"};
+  HomeAssistantTopic ip = HomeAssistantTopic{"ip", "IP", "network-outline", "", "", "", "diagnostic"};
 
   sendHomeAssistantDiscovery(uptime);
   sendHomeAssistantDiscovery(MAC);
@@ -351,12 +356,12 @@ void MQTTHomeAssistantDiscovery()
   sendHomeAssistantDiscovery(ip);
 
   // sensor information
-  struct homeAssistantTopic currentMeterValue = {"current-meter", "Water Consumption", "gauge", "m^3", "", "", ""};
-  struct homeAssistantTopic preMeterValue = {"pre-meter", "Previous Water Consumption", "gauge", "m^3", "", "", ""};
-  struct homeAssistantTopic temperature = {"temperature", "Temperature Forest", "thermometer", "°C", "", "", ""};
-  struct homeAssistantTopic humidity = {"humidity", "Humidity Forest", "water-percent", "%", "", "", ""};
-  struct homeAssistantTopic message = {"message", "LoRa Message", "message", "", "", "", ""};
-  struct homeAssistantTopic packet_number = {"packet_number", "LoRa Packet Number", "counter", "", "", "", ""};
+  HomeAssistantTopic currentMeterValue = HomeAssistantTopic{"current-meter", "Water Consumption", "gauge", "m^3", "", "", ""};
+  HomeAssistantTopic preMeterValue = HomeAssistantTopic{"pre-meter", "Previous Water Consumption", "gauge", "m^3", "", "", ""};
+  HomeAssistantTopic temperature = HomeAssistantTopic{"temperature", "Temperature Forest", "thermometer", "°C", "", "", ""};
+  HomeAssistantTopic humidity = HomeAssistantTopic{"humidity", "Humidity Forest", "water-percent", "%", "", "", ""};
+  HomeAssistantTopic message = HomeAssistantTopic{"message", "LoRa Message", "message", "", "", "", ""};
+  HomeAssistantTopic packet_number = HomeAssistantTopic{"packet_number", "LoRa Packet Number", "counter", "", "", "", ""};
 
   sendHomeAssistantDiscovery(currentMeterValue);
   sendHomeAssistantDiscovery(preMeterValue);
@@ -368,17 +373,6 @@ void MQTTHomeAssistantDiscovery()
 
 void loop()
 {
-  // Send Device Information only every minute
-  unsigned long currentMillis = millis();
-  if (currentMillis - previousMillis > one_minute_interval)
-  {
-    previousMillis = currentMillis;
-    if (client.connected())
-    {
-      sendDeviceInformationMQTT();
-    }
-  }
-
   // try to parse packet
   int packetSize = LoRa.parsePacket();
   if (packetSize)
@@ -429,17 +423,20 @@ void reconnect()
 
 void sendDeviceInformationMQTT()
 {
-  const int capacityPayload = JSON_OBJECT_SIZE(14);
-  StaticJsonDocument<capacityPayload> payload;
+  if (client.connected())
+  {
+    const int capacityPayload = JSON_OBJECT_SIZE(14);
+    StaticJsonDocument<capacityPayload> payload;
 
-  payload["uptime"] = millis();
-  payload["mac"] = WiFi.macAddress();
-  payload["hostname"] = WiFi.getHostname();
-  payload["wifiRSSI"] = WiFi.RSSI();
-  payload["ip"] = WiFi.localIP();
+    payload["uptime"] = millis();
+    payload["mac"] = WiFi.macAddress();
+    payload["hostname"] = WiFi.getHostname();
+    payload["wifiRSSI"] = WiFi.RSSI();
+    payload["ip"] = WiFi.localIP();
 
-  String payloadSerialized;
-  serializeJson(payload, payloadSerialized);
+    String payloadSerialized;
+    serializeJson(payload, payloadSerialized);
 
-  client.publish(mqttState, String(payloadSerialized).c_str(), true);
+    client.publish(mqttState, String(payloadSerialized).c_str(), true);
+  }
 }
