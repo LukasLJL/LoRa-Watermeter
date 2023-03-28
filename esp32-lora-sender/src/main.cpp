@@ -249,29 +249,31 @@ String processor(const String &var)
 
 void loop()
 {
-  wifi_sta_list_t wifi_sta_list;
-  tcpip_adapter_sta_list_t adapter_sta_list;
+  if (watermeterIP == "127.0.0.1"){
+    wifi_sta_list_t wifi_sta_list;
+    tcpip_adapter_sta_list_t adapter_sta_list;
 
-  memset(&wifi_sta_list, 0, sizeof(wifi_sta_list));
-  memset(&adapter_sta_list, 0, sizeof(adapter_sta_list));
+    memset(&wifi_sta_list, 0, sizeof(wifi_sta_list));
+    memset(&adapter_sta_list, 0, sizeof(adapter_sta_list));
 
-  esp_wifi_ap_get_sta_list(&wifi_sta_list);
-  tcpip_adapter_get_sta_list(&wifi_sta_list, &adapter_sta_list);
+    esp_wifi_ap_get_sta_list(&wifi_sta_list);
+    tcpip_adapter_get_sta_list(&wifi_sta_list, &adapter_sta_list);
 
-  int count = adapter_sta_list.num;
-  if (count > 0)
-  {
-    String ips[count];
-    for (int i = 0; i < adapter_sta_list.num; i++)
+    int count = adapter_sta_list.num;
+    if (count > 0)
     {
+      String ips[count];
+      for (int i = 0; i < adapter_sta_list.num; i++)
+      {
 
-      tcpip_adapter_sta_info_t station = adapter_sta_list.sta[i];
+        tcpip_adapter_sta_info_t station = adapter_sta_list.sta[i];
 
-      char ip[IP4ADDR_STRLEN_MAX];
-      esp_ip4addr_ntoa(&station.ip, ip, IP4ADDR_STRLEN_MAX);
-      ips[i] = ip;
+        char ip[IP4ADDR_STRLEN_MAX];
+        esp_ip4addr_ntoa(&station.ip, ip, IP4ADDR_STRLEN_MAX);
+        ips[i] = ip;
+      }
+      watermeterIP = ips[0];
     }
-    watermeterIP = ips[0];
   }
   delay(10000);
 }
