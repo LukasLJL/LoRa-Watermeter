@@ -7,7 +7,7 @@ To transfer the data over the long distance, we´re using two esp32 with a point
 ![architecture-diagram](./img/architecture.png "Architecture")
 
 ## Documentation
-There is specific README for each part of this project:
+There is a specific README for each part of this project:
 - [ESP32-LoRa-Gateway](./esp32-lora-gw/README.md)
 - [ESP32-LoRa-Sender](./esp32-lora-sender/README.md)
 - [Demo](./demo/README.md)
