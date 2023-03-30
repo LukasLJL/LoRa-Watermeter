@@ -109,7 +109,7 @@ void setupPreferences()
     preferences.putString("wifi-ssid", WIFI_SSID);
     preferences.putString("wifi-password", WIFI_PASSWORD);
     preferences.putUInt("lora-interval", 10);
-    preferences.putUInt("lora-word", 0xF3);
+    preferences.putUInt("lora-sync", 243);
 
     preferences.putBool("hasInit", true);
 
@@ -121,7 +121,7 @@ void setupPreferences()
   config.ssid = preferences.getString("wifi-ssid");
   config.password = preferences.getString("wifi-password");
   config.interval = preferences.getUInt("lora-interval");
-  config.word = preferences.getUInt("lora-word");
+  config.word = preferences.getUInt("lora-sync");
 
   preferences.end();
 }
@@ -167,20 +167,16 @@ void setupWebServer()
     Config newConfig;
 
     if (request->hasParam("wifi-ssid", true)) {
-        String ssid = request->getParam("wifi-ssid", true)->value();
-        newConfig.ssid = ssid;
+        newConfig.ssid = request->getParam("wifi-ssid", true)->value();
     }
     if (request->hasParam("wifi-ssid", true)) {
-        String password = request->getParam("wifi-password", true)->value();
-        newConfig.password = password;
+        newConfig.password = request->getParam("wifi-password", true)->value();
     }
     if (request->hasParam("lora-interval", true)) {
-        String interval = request->getParam("lora-interval", true)->value();
-        newConfig.interval = static_cast<uint32_t>(interval.toInt());
+        newConfig.interval = request->getParam("lora-interval", true)->value().toInt();
     }
-    if (request->hasParam("lora-word", true)) {
-        String word = request->getParam("lora-word", true)->value();
-        newConfig.word = static_cast<uint32_t>(word.toInt());
+    if (request->hasParam("lora-sync", true)) {
+        newConfig.word = request->getParam("lora-sync", true)->value().toInt();
     }
 
     
@@ -196,7 +192,7 @@ void setupWebServer()
       preferences.putUInt("lora-interval", newConfig.interval);
     }
     if (newConfig.word) {
-      preferences.putUInt("lora-word", newConfig.word);
+      preferences.putUInt("lora-sync", newConfig.word);
     }
       
     preferences.end();
@@ -227,6 +223,10 @@ String processor(const String &var)
   else if (var == "WATERMETERIP")
   {
     return watermeterIP;
+  }
+  else if (var == "COUNTER")
+  {
+    return String(counter);
   }
   else if (var == "CONFIG_SSID")
   {
